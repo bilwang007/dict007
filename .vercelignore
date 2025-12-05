@@ -1,0 +1,70 @@
+# Vercel Ignore File
+# Files and directories to exclude from deployment
+
+# Development files
+.env.local
+.env*.local
+*.log
+*.tsbuildinfo
+
+# Testing files
+test/
+tests/
+__tests__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+test-*.js
+test-*.ts
+test-*.sh
+
+# Documentation (optional - remove if you want docs in deployment)
+*.md
+!README.md
+
+# SQL files (not needed in deployment)
+*.sql
+
+# Scripts (not needed in deployment)
+*.sh
+RUN_ME.sh
+QUICK_TEST.sh
+test-*.sh
+
+# Configuration templates
+env.local.template
+*.template
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts (Vercel builds these)
+.next/
+out/
+dist/
+build/
+
+# Dependencies (installed by Vercel)
+node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Prisma (if not using)
+prisma/migrations/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
