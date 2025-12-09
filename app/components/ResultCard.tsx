@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { BookOpen, Loader2, Check, Sparkles, MessageSquare, X, Save } from 'lucide-react'
+import { BookOpen, Loader2, Check, Sparkles, MessageSquare, X, Save, ImageIcon } from 'lucide-react'
 import Image from 'next/image'
 import AudioPlayer from './AudioPlayer'
 import { createClient } from '@/app/lib/supabase/client'
@@ -77,7 +77,15 @@ export default function ResultCard({
   const [userComment, setUserComment] = useState('')
   const [isLoadingComment, setIsLoadingComment] = useState(false)
   const [isSavingComment, setIsSavingComment] = useState(false)
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
+  const [generatingImageIndex, setGeneratingImageIndex] = useState<number | null>(null)
+  const [currentResult, setCurrentResult] = useState(result)
   
+  // Update current result when result prop changes
+  useEffect(() => {
+    setCurrentResult(result)
+  }, [result])
+
   // Load user comment when result changes
   useEffect(() => {
     if (result?.wordDefinitionId) {
@@ -86,6 +94,72 @@ export default function ResultCard({
       setUserComment('')
     }
   }, [result?.wordDefinitionId])
+  
+  const handleGenerateImage = async (meaningIndex?: number) => {
+    if (isGeneratingImage) return
+    
+    setIsGeneratingImage(true)
+    setGeneratingImageIndex(meaningIndex ?? null)
+    
+    try {
+      const definition = meaningIndex !== undefined && currentResult.meanings
+        ? currentResult.meanings[meaningIndex].definitionTarget
+        : currentResult.definitionTarget || currentResult.definition
+      
+      const meaningContext = meaningIndex !== undefined && currentResult.meanings
+        ? currentResult.meanings[meaningIndex].definition
+        : undefined
+      
+      const response = await fetch('/api/image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          word: currentResult.word,
+          definition,
+          meaningContext,
+        }),
+      })
+      
+      if (response.ok) {
+        const { imageUrl } = await response.json()
+        if (imageUrl) {
+          // Update the result with the new image URL
+          if (meaningIndex !== undefined && currentResult.meanings) {
+            // Update specific meaning's image
+            const updatedMeanings = [...currentResult.meanings]
+            updatedMeanings[meaningIndex] = {
+              ...updatedMeanings[meaningIndex],
+              imageUrl,
+            }
+            setCurrentResult({
+              ...currentResult,
+              meanings: updatedMeanings,
+              imageUrl: meaningIndex === 0 ? imageUrl : currentResult.imageUrl, // Update main image if first meaning
+            })
+          } else {
+            // Update main image
+            setCurrentResult({
+              ...currentResult,
+              imageUrl,
+            })
+          }
+          
+          // Also update the parent component's result
+          window.dispatchEvent(new CustomEvent('imageGenerated', {
+            detail: { word: currentResult.word, imageUrl, meaningIndex }
+          }))
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate image:', error)
+      alert('Failed to generate image. Please try again.')
+    } finally {
+      setIsGeneratingImage(false)
+      setGeneratingImageIndex(null)
+    }
+  }
   
   const loadUserComment = async () => {
     if (!result?.wordDefinitionId) return
@@ -359,58 +433,174 @@ export default function ResultCard({
         </div>
       </div>
 
-      {/* Image */}
-      {result.imageUrl && !imageError && (
-        <div className="mb-4 sm:mb-6 rounded-lg sm:rounded-xl overflow-hidden bg-gray-100">
-          <Image
-            src={result.imageUrl}
-            alt={`Visualization of ${result.word}`}
-            width={800}
-            height={400}
-            className="w-full h-auto"
-            unoptimized
-            onError={() => setImageError(true)}
-          />
-        </div>
+      {/* Image Generation Button and Main Image - Only show if single meaning */}
+      {(!currentResult.meanings || currentResult.meanings.length <= 1) && (
+        <>
+          <div className="mb-4 sm:mb-6 flex items-center gap-3">
+            {!currentResult.imageUrl && (
+              <button
+                onClick={() => handleGenerateImage()}
+                disabled={isGeneratingImage}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                title="Generate image from LLM"
+              >
+                {isGeneratingImage && generatingImageIndex === null ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Generating Image...</span>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="w-4 h-4" />
+                    <span>Generate Image</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* Main Image - Only for single meaning */}
+          {currentResult.imageUrl && !imageError && (
+            <div className="mb-4 sm:mb-6 rounded-lg sm:rounded-xl overflow-hidden bg-gray-100 relative group">
+              <Image
+                src={currentResult.imageUrl}
+                alt={`Visualization of ${currentResult.word}`}
+                width={800}
+                height={400}
+                className="w-full h-auto"
+                unoptimized
+                onError={() => setImageError(true)}
+              />
+              <button
+                onClick={() => handleGenerateImage()}
+                disabled={isGeneratingImage}
+                className="absolute top-2 right-2 p-2 bg-white/80 hover:bg-white border border-gray-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed opacity-0 group-hover:opacity-100"
+                title="Regenerate image"
+              >
+                {isGeneratingImage && generatingImageIndex === null ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-700" />
+                ) : (
+                  <ImageIcon className="w-4 h-4 text-gray-700" />
+                )}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Definition */}
+      {/* Definition - Show multiple meanings if available */}
       <div className="mb-4 sm:mb-6">
         <h2 className="text-lg sm:text-xl font-light text-gray-900 mb-2 sm:mb-3">Definition</h2>
-        {/* Target Language Definition - Always show first */}
-        {result.definitionTarget && result.definitionTarget.trim() ? (
-          <div className="mb-3">
-            <FormattedDefinition text={result.definitionTarget} />
+        
+        {/* If multiple meanings, show each separately */}
+        {currentResult.meanings && currentResult.meanings.length > 1 ? (
+          <div className="space-y-6">
+            {currentResult.meanings.map((meaning, index) => (
+              <div key={index} className="border-l-4 border-blue-200 pl-4 py-2">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                    Meaning {meaning.meaningIndex}
+                  </h3>
+                  <button
+                    onClick={() => handleGenerateImage(index)}
+                    disabled={isGeneratingImage}
+                    className="flex items-center gap-1.5 px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded text-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Generate image for this meaning"
+                  >
+                    {isGeneratingImage && generatingImageIndex === index ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Generating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="w-3 h-3" />
+                        <span>Generate Image</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                
+                {/* Meaning Image */}
+                {meaning.imageUrl && (
+                  <div className="mb-3 rounded-lg overflow-hidden bg-gray-100">
+                    <Image
+                      src={meaning.imageUrl}
+                      alt={`Visualization of ${currentResult.word} - Meaning ${meaning.meaningIndex}`}
+                      width={600}
+                      height={300}
+                      className="w-full h-auto"
+                      unoptimized
+                    />
+                  </div>
+                )}
+                
+                {/* Target Language Definition */}
+                <div className="mb-2">
+                  <FormattedDefinition text={meaning.definitionTarget} />
+                </div>
+                
+                {/* Native Language Definition/Translation */}
+                {meaning.definition && meaning.definition.trim() && (
+                  <div className="mt-2">
+                    <FormattedDefinition text={meaning.definition} className="text-base sm:text-lg text-gray-700" />
+                  </div>
+                )}
+                
+                {/* Examples for this meaning */}
+                {meaning.examples && meaning.examples.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {meaning.examples.map((example, exIndex) => (
+                      <div key={exIndex} className="bg-gray-50 border border-gray-200 p-3 rounded-xl">
+                        <p className="text-base text-gray-900 font-light">{example.sentence}</p>
+                        <p className="text-sm text-gray-600 italic mt-1">{example.translation}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="mb-3">
-            <p className="text-lg sm:text-xl text-gray-500 italic">Definition in {targetLanguage} not available</p>
-          </div>
-        )}
-        {/* Native Language Definition/Translation */}
-        {result.definition && result.definition.trim() && (
-          <div className="mt-2">
-            <FormattedDefinition text={result.definition} className="text-base sm:text-lg text-gray-700" />
-          </div>
+          <>
+            {/* Single meaning - show as before */}
+            {currentResult.definitionTarget && currentResult.definitionTarget.trim() ? (
+              <div className="mb-3">
+                <FormattedDefinition text={currentResult.definitionTarget} />
+              </div>
+            ) : (
+              <div className="mb-3">
+                <p className="text-lg sm:text-xl text-gray-500 italic">Definition in {targetLanguage} not available</p>
+              </div>
+            )}
+            {/* Native Language Definition/Translation */}
+            {currentResult.definition && currentResult.definition.trim() && (
+              <div className="mt-2">
+                <FormattedDefinition text={currentResult.definition} className="text-base sm:text-lg text-gray-700" />
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Example Sentences */}
-      <div className="mb-4 sm:mb-6 space-y-3 sm:space-y-4">
-        <h2 className="text-lg sm:text-xl font-light text-gray-900 mb-2 sm:mb-3">Examples</h2>
-        {result.examples.map((example, index) => (
-          <div
-            key={index}
-            className="bg-gray-50 border border-gray-200 p-3 sm:p-4 rounded-xl"
-          >
-            <div className="flex items-start gap-2 sm:gap-3 mb-1.5 sm:mb-2">
-              <p className="text-base sm:text-lg text-gray-900 flex-1 font-light">{example.sentence}</p>
-              <AudioPlayer text={example.sentence} language={targetLanguage} size="md" />
+      {/* Example Sentences - Only show if not showing per-meaning examples */}
+      {(!currentResult.meanings || currentResult.meanings.length <= 1) && (
+        <div className="mb-4 sm:mb-6 space-y-3 sm:space-y-4">
+          <h2 className="text-lg sm:text-xl font-light text-gray-900 mb-2 sm:mb-3">Examples</h2>
+          {currentResult.examples.map((example, index) => (
+            <div
+              key={index}
+              className="bg-gray-50 border border-gray-200 p-3 sm:p-4 rounded-xl"
+            >
+              <div className="flex items-start gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+                <p className="text-base sm:text-lg text-gray-900 flex-1 font-light">{example.sentence}</p>
+                <AudioPlayer text={example.sentence} language={targetLanguage} size="md" />
+              </div>
+              <p className="text-sm sm:text-base text-gray-600 italic ml-0 sm:ml-4">{example.translation}</p>
             </div>
-            <p className="text-sm sm:text-base text-gray-600 italic ml-0 sm:ml-4">{example.translation}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Usage Note */}
       <div className="bg-gray-50 border border-gray-200 p-4 sm:p-5 rounded-xl">

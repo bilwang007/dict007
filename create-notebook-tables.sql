@@ -1,24 +1,37 @@
--- Create notebook_entries table
+-- Create notebook_entries table with complete schema
 CREATE TABLE IF NOT EXISTS notebook_entries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   word TEXT NOT NULL,
+  phonetic TEXT,
   target_language TEXT NOT NULL,
   native_language TEXT NOT NULL,
   definition TEXT NOT NULL,
   definition_target TEXT,
+  meaning_index INTEGER, -- Index of meaning (1, 2, 3, etc.) - NULL for single meaning entries
   image_url TEXT,
   audio_url TEXT,
-  example_sentence_1 TEXT NOT NULL,
-  example_sentence_2 TEXT NOT NULL,
-  example_translation_1 TEXT NOT NULL,
-  example_translation_2 TEXT NOT NULL,
+  example_sentence_1 TEXT,
+  example_sentence_2 TEXT,
+  example_translation_1 TEXT,
+  example_translation_2 TEXT,
   usage_note TEXT,
   tags TEXT[] DEFAULT '{}',
-  first_learned_date TIMESTAMPTZ DEFAULT NOW(),
+  first_learned_date TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, word, target_language, native_language)
+  -- Unique constraint allowing multiple meanings
+  CONSTRAINT notebook_entries_user_word_lang_meaning_unique 
+    UNIQUE (user_id, word, target_language, native_language, COALESCE(meaning_index, -1)),
+  -- Validation constraints
+  CONSTRAINT check_meaning_index_positive 
+    CHECK (meaning_index IS NULL OR meaning_index > 0),
+  CONSTRAINT check_word_not_empty 
+    CHECK (LENGTH(TRIM(word)) > 0),
+  CONSTRAINT check_target_language_format 
+    CHECK (LENGTH(TRIM(target_language)) BETWEEN 2 AND 5),
+  CONSTRAINT check_native_language_format 
+    CHECK (LENGTH(TRIM(native_language)) BETWEEN 2 AND 5)
 );
 
 -- Create stories table
@@ -31,12 +44,32 @@ CREATE TABLE IF NOT EXISTS stories (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create indexes
+-- Create indexes for optimal performance
 CREATE INDEX IF NOT EXISTS idx_notebook_entries_user_id ON notebook_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_notebook_entries_word_lookup 
+  ON notebook_entries(user_id, word, target_language, native_language);
+CREATE INDEX IF NOT EXISTS idx_notebook_entries_meaning_index 
+  ON notebook_entries(user_id, word, target_language, native_language, meaning_index)
+  WHERE meaning_index IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_notebook_entries_tags ON notebook_entries USING GIN(tags);
 CREATE INDEX IF NOT EXISTS idx_notebook_entries_created_at ON notebook_entries(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notebook_entries_first_learned ON notebook_entries(first_learned_date);
 CREATE INDEX IF NOT EXISTS idx_stories_user_id ON stories(user_id);
 CREATE INDEX IF NOT EXISTS idx_stories_created_at ON stories(created_at DESC);
+
+-- Create trigger for automatic updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_notebook_entries_updated_at
+  BEFORE UPDATE ON notebook_entries
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 
 -- Enable Row Level Security
 ALTER TABLE notebook_entries ENABLE ROW LEVEL SECURITY;

@@ -56,6 +56,7 @@ export async function getNotebookEntries(): Promise<NotebookEntry[]> {
     nativeLanguage: entry.native_language,
     definition: entry.definition,
     definitionTarget: entry.definition_target || undefined,
+    meaningIndex: entry.meaning_index !== null && entry.meaning_index !== undefined ? entry.meaning_index : undefined,
     imageUrl: entry.image_url || undefined,
     audioUrl: entry.audio_url || undefined,
     exampleSentence1: entry.example_sentence_1,
@@ -82,15 +83,36 @@ export async function saveNotebookEntry(
   }
   const user = session.user
 
-  // Check if entry already exists
-  const { data: existing } = await supabase
+  // Check if entry already exists (include meaningIndex if provided)
+  const query = supabase
     .from('notebook_entries')
     .select('*')
     .eq('user_id', user.id)
     .eq('word', entry.word)
     .eq('target_language', entry.targetLanguage)
     .eq('native_language', entry.nativeLanguage)
-    .single()
+  
+  // If meaningIndex is provided, also match on that to store meanings separately
+  // Database schema must have meaning_index column - proper architecture requires correct schema
+  if ((entry as any).meaningIndex !== undefined) {
+    query.eq('meaning_index', (entry as any).meaningIndex)
+  } else {
+    // If no meaningIndex, only match entries without meaningIndex (null)
+    query.is('meaning_index', null)
+  }
+  
+  const { data: existing, error: queryError } = await query.maybeSingle()
+  
+  // If query fails due to missing column, database schema is incorrect
+  // The proper fix is to run the migration, not work around it in code
+  if (queryError) {
+    if (queryError.code === '42703' || queryError.message?.includes('meaning_index')) {
+      console.error('❌ Database schema error: meaning_index column missing.')
+      console.error('   Please run migration: migrate_to_complete_schema.sql')
+      throw new Error('Database schema is incomplete. Please run the migration to add meaning_index column.')
+    }
+    throw queryError
+  }
 
   if (existing && !replaceExisting) {
     // Return existing entry
@@ -102,6 +124,7 @@ export async function saveNotebookEntry(
       nativeLanguage: existing.native_language,
       definition: existing.definition,
       definitionTarget: existing.definition_target || undefined,
+      meaningIndex: existing.meaning_index !== null && existing.meaning_index !== undefined ? existing.meaning_index : undefined,
       imageUrl: existing.image_url || undefined,
       audioUrl: existing.audio_url || undefined,
       exampleSentence1: existing.example_sentence_1,
@@ -123,6 +146,7 @@ export async function saveNotebookEntry(
     native_language: entry.nativeLanguage,
     definition: entry.definition,
     definition_target: entry.definitionTarget || null,
+    meaning_index: (entry as any).meaningIndex !== undefined ? (entry as any).meaningIndex : null,
     image_url: entry.imageUrl || null,
     audio_url: entry.audioUrl || null,
     example_sentence_1: entry.exampleSentence1,
@@ -141,8 +165,13 @@ export async function saveNotebookEntry(
       .eq('id', existing.id)
       .select()
       .single()
-
+    
     if (error) {
+      if (error.code === '42703' || error.message?.includes('meaning_index')) {
+        console.error('❌ Database schema error: meaning_index column missing.')
+        console.error('   Please run migration: migrate_to_complete_schema.sql')
+        throw new Error('Database schema is incomplete. Please run the migration.')
+      }
       console.error('Error updating notebook entry:', error)
       throw error
     }
@@ -161,6 +190,7 @@ export async function saveNotebookEntry(
       exampleSentence2: data.example_sentence_2,
       exampleTranslation1: data.example_translation_1,
       exampleTranslation2: data.example_translation_2,
+      meaningIndex: data.meaning_index !== null && data.meaning_index !== undefined ? data.meaning_index : undefined,
       usageNote: data.usage_note || '',
       tags: data.tags || undefined,
       firstLearnedDate: existing.first_learned_date || existing.created_at,
@@ -175,6 +205,11 @@ export async function saveNotebookEntry(
       .single()
 
     if (error) {
+      if (error.code === '42703' || error.message?.includes('meaning_index')) {
+        console.error('❌ Database schema error: meaning_index column missing.')
+        console.error('   Please run migration: migrate_to_complete_schema.sql')
+        throw new Error('Database schema is incomplete. Please run the migration.')
+      }
       console.error('Error saving notebook entry:', error)
       throw error
     }
@@ -187,6 +222,7 @@ export async function saveNotebookEntry(
       nativeLanguage: data.native_language,
       definition: data.definition,
       definitionTarget: data.definition_target || undefined,
+      meaningIndex: data.meaning_index !== null && data.meaning_index !== undefined ? data.meaning_index : undefined,
       imageUrl: data.image_url || undefined,
       audioUrl: data.audio_url || undefined,
       exampleSentence1: data.example_sentence_1,

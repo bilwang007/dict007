@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
-import { ChevronDown, ChevronUp, Trash2, Tag, X, MessageSquare, Save } from 'lucide-react'
+import { ChevronDown, ChevronUp, Trash2, Tag, X, MessageSquare, Save, ImageIcon, Loader2 } from 'lucide-react'
 import AudioPlayer from './AudioPlayer'
 import { addTagToEntry, removeTagFromEntry } from '@/app/lib/storage-supabase'
 import { createClient } from '@/app/lib/supabase/client'
@@ -27,6 +27,7 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
   const [isSavingComment, setIsSavingComment] = useState(false)
   const [currentEntry, setCurrentEntry] = useState<NotebookEntry>(entry)
   const [displayedComment, setDisplayedComment] = useState<string>('')
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
   
   // Load user comment when entry changes
   useEffect(() => {
@@ -232,6 +233,48 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
       console.error('Error removing tag:', error)
     }
   }
+  
+  const handleGenerateImage = async () => {
+    if (isGeneratingImage) return
+    
+    setIsGeneratingImage(true)
+    
+    try {
+      const definition = currentEntry.definitionTarget || currentEntry.definition
+      const meaningContext = currentEntry.definition
+      
+      const response = await fetch('/api/image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          word: currentEntry.word,
+          definition,
+          meaningContext,
+        }),
+      })
+      
+      if (response.ok) {
+        const { imageUrl } = await response.json()
+        if (imageUrl) {
+          // Update the entry with the new image URL
+          setCurrentEntry({
+            ...currentEntry,
+            imageUrl,
+          })
+          
+          // Also update the parent component's entry
+          window.dispatchEvent(new CustomEvent('notebookUpdated'))
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate image:', error)
+      alert('Failed to generate image. Please try again.')
+    } finally {
+      setIsGeneratingImage(false)
+    }
+  }
 
   return (
     <motion.div
@@ -245,7 +288,12 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
       <div className="p-4 sm:p-5 flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-3 mb-2 flex-wrap">
-            <h3 className="text-xl sm:text-2xl font-medium text-gray-900 truncate">{entry.word}</h3>
+            <h3 className="text-xl sm:text-2xl font-medium text-gray-900 truncate">
+              {entry.word}
+              {entry.meaningIndex && (
+                <span className="ml-2 text-sm font-normal text-gray-500">(Meaning {entry.meaningIndex})</span>
+              )}
+            </h3>
             {(entry as any).phonetic && (
               <span className="text-base sm:text-lg text-gray-500 font-light">/{(entry as any).phonetic}/</span>
             )}
@@ -309,9 +357,33 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
             className="overflow-hidden border-t border-gray-100"
           >
             <div className="p-4 space-y-4">
+              {/* Image Generation Button */}
+              {!currentEntry.imageUrl && (
+                <div className="mb-4">
+                  <button
+                    onClick={handleGenerateImage}
+                    disabled={isGeneratingImage}
+                    className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    title="Generate image from LLM"
+                  >
+                    {isGeneratingImage ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Generating Image...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ImageIcon className="w-4 h-4" />
+                        <span>Generate Image</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
               {/* Image */}
               {currentEntry.imageUrl && currentEntry.imageUrl.trim() !== '' && !imageError && (
-                <div className="w-full max-w-xs h-48 rounded-lg overflow-hidden bg-gray-50">
+                <div className="w-full max-w-xs h-48 rounded-lg overflow-hidden bg-gray-50 relative group mb-4">
                   <Image
                     src={currentEntry.imageUrl}
                     alt={currentEntry.word}
@@ -321,6 +393,18 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
                     unoptimized
                     onError={() => setImageError(true)}
                   />
+                  <button
+                    onClick={handleGenerateImage}
+                    disabled={isGeneratingImage}
+                    className="absolute top-2 right-2 p-2 bg-white/80 hover:bg-white border border-gray-300 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed opacity-0 group-hover:opacity-100"
+                    title="Regenerate image"
+                  >
+                    {isGeneratingImage ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-700" />
+                    ) : (
+                      <ImageIcon className="w-4 h-4 text-gray-700" />
+                    )}
+                  </button>
                 </div>
               )}
 

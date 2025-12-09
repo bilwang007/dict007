@@ -65,7 +65,8 @@ interface DefinitionLoadingProps {
   definitionTarget?: string
   examples?: Array<{ sentence: string; translation: string }>
   usageNote?: string
-  source?: 'database' | 'user_edit' | 'llm'
+  source?: 'database' | 'user_edit' | 'llm' | 'wikipedia' | 'notebook'
+  isLoadingExamples?: boolean
 }
 
 export function DefinitionLoadingCard({
@@ -75,35 +76,38 @@ export function DefinitionLoadingCard({
   examples,
   usageNote,
   source,
+  isLoadingExamples = false,
 }: DefinitionLoadingProps) {
   const [showDefinition, setShowDefinition] = useState(false)
   const [showExamples, setShowExamples] = useState(false)
   const [showUsageNote, setShowUsageNote] = useState(false)
 
-  // Show definition immediately when word appears
+  // Show definition immediately when word appears (consistent animation)
   useEffect(() => {
     if (word) {
-      setShowDefinition(true)
+      // Small delay for smooth appearance
+      const timer = setTimeout(() => setShowDefinition(true), 100)
+      return () => clearTimeout(timer)
     }
   }, [word])
 
-  // Show examples when definition starts typing
+  // Show examples when definition is available or when examples are loaded
   useEffect(() => {
-    if (showDefinition && definitionTarget) {
-      // Start showing examples after a short delay
-      const timer = setTimeout(() => setShowExamples(true), 800)
+    if (showDefinition && (definitionTarget || examples)) {
+      // Start showing examples after definition appears
+      const timer = setTimeout(() => setShowExamples(true), 600)
       return () => clearTimeout(timer)
     }
-  }, [showDefinition, definitionTarget])
+  }, [showDefinition, definitionTarget, examples])
 
-  // Show usage note when examples start showing
+  // Show usage note when examples are available
   useEffect(() => {
-    if (showExamples && examples && examples.length > 0) {
+    if (showExamples && usageNote) {
       // Start showing usage note after examples appear
-      const timer = setTimeout(() => setShowUsageNote(true), 800)
+      const timer = setTimeout(() => setShowUsageNote(true), 600)
       return () => clearTimeout(timer)
     }
-  }, [showExamples, examples])
+  }, [showExamples, usageNote])
 
   const getSourceBadge = () => {
     if (!source) return null
@@ -111,8 +115,11 @@ export function DefinitionLoadingCard({
       database: { text: 'From Database', color: 'bg-green-100 text-green-700' },
       user_edit: { text: 'Your Custom', color: 'bg-purple-100 text-purple-700' },
       llm: { text: 'AI Generated', color: 'bg-blue-100 text-blue-700' },
+      wikipedia: { text: 'From Wikipedia', color: 'bg-blue-100 text-blue-700' },
+      notebook: { text: 'From Notebook', color: 'bg-yellow-100 text-yellow-700' },
     }
     const badge = badges[source]
+    if (!badge) return null
     return (
       <span className={`px-2 py-1 rounded text-xs font-medium ${badge.color}`}>
         {badge.text}
@@ -160,34 +167,43 @@ export function DefinitionLoadingCard({
       )}
 
       {/* Examples */}
-      {showExamples && examples && examples.length > 0 && (
+      {showExamples && (
         <div className="mb-4 sm:mb-6 space-y-3 sm:space-y-4">
           <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-2 sm:mb-3">
             Examples
           </h2>
-          {examples.map((example, index) => (
-            <div
-              key={index}
-              className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 sm:p-4 rounded-lg border-l-4 border-green-400"
-            >
-              <div className="mb-1.5 sm:mb-2">
-                <p className="text-base sm:text-lg text-gray-900">
+          {isLoadingExamples && (!examples || examples.length === 0) ? (
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 sm:p-4 rounded-lg border-l-4 border-green-400">
+              <div className="flex items-center gap-2 text-gray-500">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-sm">Generating examples...</span>
+              </div>
+            </div>
+          ) : examples && examples.length > 0 ? (
+            examples.map((example, index) => (
+              <div
+                key={index}
+                className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 sm:p-4 rounded-lg border-l-4 border-green-400"
+              >
+                <div className="mb-1.5 sm:mb-2">
+                  <p className="text-base sm:text-lg text-gray-900">
+                    <TypingAnimation
+                      text={example.sentence}
+                      speed={30}
+                      className="text-gray-900"
+                    />
+                  </p>
+                </div>
+                <p className="text-sm sm:text-base text-gray-600 italic ml-0 sm:ml-4">
                   <TypingAnimation
-                    text={example.sentence}
-                    speed={30}
-                    className="text-gray-900"
+                    text={example.translation}
+                    speed={35}
+                    className="text-gray-600"
                   />
                 </p>
               </div>
-              <p className="text-sm sm:text-base text-gray-600 italic ml-0 sm:ml-4">
-                <TypingAnimation
-                  text={example.translation}
-                  speed={35}
-                  className="text-gray-600"
-                />
-              </p>
-            </div>
-          ))}
+            ))
+          ) : null}
         </div>
       )}
 
@@ -211,7 +227,7 @@ export function DefinitionLoadingCard({
       {(!showDefinition || !definitionTarget) && (
         <div className="flex items-center gap-2 text-gray-500 text-sm mt-4">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span>Generating definition...</span>
+          <span>Loading definition...</span>
         </div>
       )}
     </div>

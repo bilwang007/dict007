@@ -24,18 +24,27 @@ export interface ExampleSentence {
   translation: string
 }
 
+export interface WordMeaning {
+  meaningIndex: number // Index of this meaning (1, 2, 3, etc.)
+  definitionTarget: string // Target language definition for this specific meaning
+  definition: string // Native language definition for this specific meaning
+  imageUrl?: string // Optional image URL for this specific meaning
+  examples: ExampleSentence[] // Examples for this specific meaning
+}
+
 export interface LookupResult {
   word: string
   phonetic?: string // Phonetic transcription (音标)
-  definition: string // Native language definition
-  definitionTarget: string // Target language definition
-  imageUrl: string
+  definition: string // Native language definition (combined, for backward compatibility)
+  definitionTarget: string // Target language definition (combined, for backward compatibility)
+  meanings?: WordMeaning[] // Array of individual meanings (for words with multiple meanings)
+  imageUrl: string // Main image URL (for backward compatibility)
   examples: ExampleSentence[]
   usageNote: string
   audioUrl?: string
   isValidWord?: boolean // Whether this is a recognized word in the language
   suggestedWord?: string // Suggested correct spelling if misspelled
-  source?: 'database' | 'user_edit' | 'llm' // Where the definition came from
+  source?: 'database' | 'user_edit' | 'llm' | 'wikipedia' | 'notebook' // Where the definition came from
   wordDefinitionId?: string // ID of the word definition in database (for editing)
   targetLanguage?: string // Target language code
   nativeLanguage?: string // Native language code
@@ -49,6 +58,7 @@ export interface NotebookEntry {
   nativeLanguage: string
   definition: string
   definitionTarget?: string // Target language definition (optional for backward compatibility)
+  meaningIndex?: number // Index of this meaning (for words with multiple meanings, stored separately)
   imageUrl?: string
   audioUrl?: string
   exampleSentence1: string

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Mail, Calendar, LogOut, Save, Edit2, Globe, Target, Bell, Palette } from 'lucide-react'
+import { User, Mail, Calendar, LogOut, Edit2, Globe, Target, Bell, Palette } from 'lucide-react'
 import Navigation from '../components/Navigation'
 import { createClient } from '@/app/lib/supabase/client'
 import { LANGUAGES, type LanguageCode } from '../lib/types'
@@ -74,8 +74,6 @@ export default function ProfilePage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<any>(null)
-  const [isEditing, setIsEditing] = useState(false)
-  const [saving, setSaving] = useState(false)
   
   // Form state
   const [fullName, setFullName] = useState('')
@@ -86,6 +84,12 @@ export default function ProfilePage() {
   const [dailyGoal, setDailyGoal] = useState(10)
   const [notificationEnabled, setNotificationEnabled] = useState(true)
   const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>('light')
+  
+  // Per-field editing and saving states
+  const [editingField, setEditingField] = useState<string | null>(null)
+  const [savingField, setSavingField] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [fieldSuccess, setFieldSuccess] = useState<Record<string, boolean>>({})
 
   const t = translations[uiLanguage]
 
@@ -143,41 +147,85 @@ export default function ProfilePage() {
     }
   }
 
-  const handleSave = async () => {
-    setSaving(true)
+  // Save individual field
+  const handleSaveField = async (fieldName: string, value: any) => {
+    setSavingField(fieldName)
+    setFieldErrors(prev => ({ ...prev, [fieldName]: '' }))
+    setFieldSuccess(prev => ({ ...prev, [fieldName]: false }))
+    
     try {
+      const updateData: any = {}
+      
+      // Map field names to API field names
+      switch (fieldName) {
+        case 'fullName':
+          updateData.fullName = value
+          break
+        case 'bio':
+          updateData.bio = value
+          break
+        case 'uiLanguage':
+          updateData.uiLanguage = value
+          break
+        case 'preferredLanguages':
+          updateData.preferredLanguages = value
+          break
+        case 'learningGoals':
+          updateData.learningGoals = value
+          break
+        case 'dailyGoal':
+          updateData.dailyGoal = value
+          break
+        case 'notificationEnabled':
+          updateData.notificationEnabled = value
+          break
+        case 'theme':
+          updateData.theme = value
+          break
+        default:
+          throw new Error(`Unknown field: ${fieldName}`)
+      }
+      
       const response = await fetch('/api/user/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          fullName,
-          bio,
-          uiLanguage,
-          preferredLanguages,
-          learningGoals,
-          dailyGoal,
-          notificationEnabled,
-          theme,
-        }),
+        body: JSON.stringify(updateData),
       })
 
       if (response.ok) {
         const data = await response.json()
         setProfile(data.profile)
-        setIsEditing(false)
-        alert(t.saveSuccess)
+        setEditingField(null)
+        setFieldSuccess(prev => ({ ...prev, [fieldName]: true }))
+        
+        // Clear success message after 2 seconds
+        setTimeout(() => {
+          setFieldSuccess(prev => ({ ...prev, [fieldName]: false }))
+        }, 2000)
+        
+        // Refresh profile to get latest data
         fetchProfile(user.id)
       } else {
-        throw new Error('Failed to update')
+        const errorData = await response.json().catch(() => ({ error: 'Failed to update' }))
+        setFieldErrors(prev => ({ ...prev, [fieldName]: errorData.error || t.saveError }))
+        throw new Error(errorData.error || 'Failed to update')
       }
-    } catch (error) {
-      console.error('Error saving profile:', error)
-      alert(t.saveError)
+    } catch (error: any) {
+      console.error(`Error saving ${fieldName}:`, error)
+      setFieldErrors(prev => ({ ...prev, [fieldName]: error.message || t.saveError }))
     } finally {
-      setSaving(false)
+      setSavingField(null)
     }
+  }
+  
+  // Cancel editing a field
+  const handleCancelEdit = (fieldName: string) => {
+    setEditingField(null)
+    setFieldErrors(prev => ({ ...prev, [fieldName]: '' }))
+    // Reset to original value from profile
+    fetchProfile(user.id)
   }
 
   const handleLogout = async () => {
@@ -227,15 +275,6 @@ export default function ProfilePage() {
             <h1 className="text-3xl sm:text-4xl font-bold text-gray-900">
               {t.profile}
             </h1>
-            {!isEditing && (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
-              >
-                <Edit2 className="w-4 h-4" />
-                {t.editProfile}
-              </button>
-            )}
           </div>
 
           <div className="space-y-6">
@@ -245,18 +284,50 @@ export default function ProfilePage() {
                 {user.email?.charAt(0).toUpperCase() || 'U'}
               </div>
               <div className="flex-1">
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder={t.fullName}
-                    className="text-xl sm:text-2xl font-semibold text-gray-900 mb-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
-                  />
+                {editingField === 'fullName' ? (
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder={t.fullName}
+                      className="flex-1 text-xl sm:text-2xl font-semibold text-gray-900 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => handleSaveField('fullName', fullName)}
+                      disabled={savingField === 'fullName'}
+                      className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
+                    >
+                      {savingField === 'fullName' ? '...' : t.save}
+                    </button>
+                    <button
+                      onClick={() => handleCancelEdit('fullName')}
+                      disabled={savingField === 'fullName'}
+                      className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-sm"
+                    >
+                      {t.cancel}
+                    </button>
+                  </div>
                 ) : (
-                  <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 mb-2">
-                    {fullName || user.email?.split('@')[0] || 'User'}
-                  </h2>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 flex-1">
+                      {fullName || user.email?.split('@')[0] || 'User'}
+                    </h2>
+                    <button
+                      onClick={() => setEditingField('fullName')}
+                      className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                      title={t.editProfile}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+                {fieldErrors.fullName && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.fullName}</p>
+                )}
+                {fieldSuccess.fullName && (
+                  <p className="text-sm text-green-600 mt-1">{t.saveSuccess}</p>
                 )}
                 <div className="space-y-2 text-sm sm:text-base text-gray-600">
                   <div className="flex items-center gap-2">
@@ -277,62 +348,162 @@ export default function ProfilePage() {
             <div className="space-y-6">
               {/* Bio */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t.bio}
-                </label>
-                {isEditing ? (
-                  <textarea
-                    value={bio}
-                    onChange={(e) => setBio(e.target.value)}
-                    placeholder={t.enterBio}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
-                  />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-700">
+                    {t.bio}
+                  </label>
+                  {editingField !== 'bio' && (
+                    <button
+                      onClick={() => setEditingField('bio')}
+                      className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                      title={t.editProfile}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {editingField === 'bio' ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={bio}
+                      onChange={(e) => setBio(e.target.value)}
+                      placeholder={t.enterBio}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSaveField('bio', bio)}
+                        disabled={savingField === 'bio'}
+                        className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {savingField === 'bio' ? '...' : t.save}
+                      </button>
+                      <button
+                        onClick={() => handleCancelEdit('bio')}
+                        disabled={savingField === 'bio'}
+                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {t.cancel}
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <p className="text-base text-gray-900">{bio || t.notSet}</p>
+                )}
+                {fieldErrors.bio && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.bio}</p>
+                )}
+                {fieldSuccess.bio && (
+                  <p className="text-sm text-green-600 mt-1">{t.saveSuccess}</p>
                 )}
               </div>
 
               {/* UI Language */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                  <Globe className="w-4 h-4" />
-                  {t.uiLanguage}
-                </label>
-                {isEditing ? (
-                  <select
-                    value={uiLanguage}
-                    onChange={(e) => setUiLanguage(e.target.value as 'en' | 'zh')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
-                  >
-                    <option value="en">English</option>
-                    <option value="zh">简体中文</option>
-                  </select>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <Globe className="w-4 h-4" />
+                    {t.uiLanguage}
+                  </label>
+                  {editingField !== 'uiLanguage' && (
+                    <button
+                      onClick={() => setEditingField('uiLanguage')}
+                      className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                      title={t.editProfile}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {editingField === 'uiLanguage' ? (
+                  <div className="space-y-2">
+                    <select
+                      value={uiLanguage}
+                      onChange={(e) => setUiLanguage(e.target.value as 'en' | 'zh')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                    >
+                      <option value="en">English</option>
+                      <option value="zh">简体中文</option>
+                    </select>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSaveField('uiLanguage', uiLanguage)}
+                        disabled={savingField === 'uiLanguage'}
+                        className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {savingField === 'uiLanguage' ? '...' : t.save}
+                      </button>
+                      <button
+                        onClick={() => handleCancelEdit('uiLanguage')}
+                        disabled={savingField === 'uiLanguage'}
+                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {t.cancel}
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <p className="text-base text-gray-900">{uiLanguage === 'en' ? 'English' : '简体中文'}</p>
+                )}
+                {fieldErrors.uiLanguage && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.uiLanguage}</p>
+                )}
+                {fieldSuccess.uiLanguage && (
+                  <p className="text-sm text-green-600 mt-1">{t.saveSuccess}</p>
                 )}
               </div>
 
               {/* Preferred Languages */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t.preferredLanguages}
-                </label>
-                {isEditing ? (
-                  <div className="flex flex-wrap gap-2">
-                    {LANGUAGES.map(lang => (
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-700">
+                    {t.preferredLanguages}
+                  </label>
+                  {editingField !== 'preferredLanguages' && (
+                    <button
+                      onClick={() => setEditingField('preferredLanguages')}
+                      className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                      title={t.editProfile}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {editingField === 'preferredLanguages' ? (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      {LANGUAGES.map(lang => (
+                        <button
+                          key={lang.code}
+                          onClick={() => toggleLanguage(lang.code)}
+                          className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                            preferredLanguages.includes(lang.code)
+                              ? 'bg-gray-700 text-white'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {lang.name}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
                       <button
-                        key={lang.code}
-                        onClick={() => toggleLanguage(lang.code)}
-                        className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                          preferredLanguages.includes(lang.code)
-                            ? 'bg-gray-700 text-white'
-                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        }`}
+                        onClick={() => handleSaveField('preferredLanguages', preferredLanguages)}
+                        disabled={savingField === 'preferredLanguages'}
+                        className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
                       >
-                        {lang.name}
+                        {savingField === 'preferredLanguages' ? '...' : t.save}
                       </button>
-                    ))}
+                      <button
+                        onClick={() => handleCancelEdit('preferredLanguages')}
+                        disabled={savingField === 'preferredLanguages'}
+                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {t.cancel}
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
@@ -353,125 +524,251 @@ export default function ProfilePage() {
                     )}
                   </div>
                 )}
+                {fieldErrors.preferredLanguages && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.preferredLanguages}</p>
+                )}
+                {fieldSuccess.preferredLanguages && (
+                  <p className="text-sm text-green-600 mt-1">{t.saveSuccess}</p>
+                )}
               </div>
 
               {/* Learning Goals */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                  <Target className="w-4 h-4" />
-                  {t.learningGoals}
-                </label>
-                {isEditing ? (
-                  <textarea
-                    value={learningGoals}
-                    onChange={(e) => setLearningGoals(e.target.value)}
-                    placeholder={t.enterGoals}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
-                  />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <Target className="w-4 h-4" />
+                    {t.learningGoals}
+                  </label>
+                  {editingField !== 'learningGoals' && (
+                    <button
+                      onClick={() => setEditingField('learningGoals')}
+                      className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                      title={t.editProfile}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {editingField === 'learningGoals' ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={learningGoals}
+                      onChange={(e) => setLearningGoals(e.target.value)}
+                      placeholder={t.enterGoals}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSaveField('learningGoals', learningGoals)}
+                        disabled={savingField === 'learningGoals'}
+                        className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {savingField === 'learningGoals' ? '...' : t.save}
+                      </button>
+                      <button
+                        onClick={() => handleCancelEdit('learningGoals')}
+                        disabled={savingField === 'learningGoals'}
+                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {t.cancel}
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <p className="text-base text-gray-900">{learningGoals || t.notSet}</p>
+                )}
+                {fieldErrors.learningGoals && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.learningGoals}</p>
+                )}
+                {fieldSuccess.learningGoals && (
+                  <p className="text-sm text-green-600 mt-1">{t.saveSuccess}</p>
                 )}
               </div>
 
               {/* Daily Goal */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t.dailyGoal}
-                </label>
-                {isEditing ? (
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="number"
-                      value={dailyGoal}
-                      onChange={(e) => setDailyGoal(parseInt(e.target.value) || 10)}
-                      min="1"
-                      max="100"
-                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
-                    />
-                    <span className="text-gray-600">{t.wordsPerDay}</span>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-700">
+                    {t.dailyGoal}
+                  </label>
+                  {editingField !== 'dailyGoal' && (
+                    <button
+                      onClick={() => setEditingField('dailyGoal')}
+                      className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                      title={t.editProfile}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {editingField === 'dailyGoal' ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="number"
+                        value={dailyGoal}
+                        onChange={(e) => setDailyGoal(parseInt(e.target.value) || 10)}
+                        min="1"
+                        max="100"
+                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                        autoFocus
+                      />
+                      <span className="text-gray-600">{t.wordsPerDay}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSaveField('dailyGoal', dailyGoal)}
+                        disabled={savingField === 'dailyGoal'}
+                        className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {savingField === 'dailyGoal' ? '...' : t.save}
+                      </button>
+                      <button
+                        onClick={() => handleCancelEdit('dailyGoal')}
+                        disabled={savingField === 'dailyGoal'}
+                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {t.cancel}
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <p className="text-base text-gray-900">{dailyGoal} {t.wordsPerDay}</p>
+                )}
+                {fieldErrors.dailyGoal && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.dailyGoal}</p>
+                )}
+                {fieldSuccess.dailyGoal && (
+                  <p className="text-sm text-green-600 mt-1">{t.saveSuccess}</p>
                 )}
               </div>
 
               {/* Notifications */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                  <Bell className="w-4 h-4" />
-                  {t.notifications}
-                </label>
-                {isEditing ? (
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={notificationEnabled}
-                      onChange={(e) => setNotificationEnabled(e.target.checked)}
-                      className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
-                    />
-                    <span className="text-gray-700">{notificationEnabled ? t.enabled : t.disabled}</span>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <Bell className="w-4 h-4" />
+                    {t.notifications}
                   </label>
+                  {editingField !== 'notificationEnabled' && (
+                    <button
+                      onClick={() => setEditingField('notificationEnabled')}
+                      className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                      title={t.editProfile}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {editingField === 'notificationEnabled' ? (
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={notificationEnabled}
+                        onChange={(e) => setNotificationEnabled(e.target.checked)}
+                        className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
+                      />
+                      <span className="text-gray-700">{notificationEnabled ? t.enabled : t.disabled}</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSaveField('notificationEnabled', notificationEnabled)}
+                        disabled={savingField === 'notificationEnabled'}
+                        className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {savingField === 'notificationEnabled' ? '...' : t.save}
+                      </button>
+                      <button
+                        onClick={() => handleCancelEdit('notificationEnabled')}
+                        disabled={savingField === 'notificationEnabled'}
+                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {t.cancel}
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <p className="text-base text-gray-900">{notificationEnabled ? t.enabled : t.disabled}</p>
+                )}
+                {fieldErrors.notificationEnabled && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.notificationEnabled}</p>
+                )}
+                {fieldSuccess.notificationEnabled && (
+                  <p className="text-sm text-green-600 mt-1">{t.saveSuccess}</p>
                 )}
               </div>
 
               {/* Theme */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                  <Palette className="w-4 h-4" />
-                  {t.theme}
-                </label>
-                {isEditing ? (
-                  <select
-                    value={theme}
-                    onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'auto')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
-                  >
-                    <option value="light">{t.light}</option>
-                    <option value="dark">{t.dark}</option>
-                    <option value="auto">{t.auto}</option>
-                  </select>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <Palette className="w-4 h-4" />
+                    {t.theme}
+                  </label>
+                  {editingField !== 'theme' && (
+                    <button
+                      onClick={() => setEditingField('theme')}
+                      className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                      title={t.editProfile}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {editingField === 'theme' ? (
+                  <div className="space-y-2">
+                    <select
+                      value={theme}
+                      onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'auto')}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                    >
+                      <option value="light">{t.light}</option>
+                      <option value="dark">{t.dark}</option>
+                      <option value="auto">{t.auto}</option>
+                    </select>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSaveField('theme', theme)}
+                        disabled={savingField === 'theme'}
+                        className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {savingField === 'theme' ? '...' : t.save}
+                      </button>
+                      <button
+                        onClick={() => handleCancelEdit('theme')}
+                        disabled={savingField === 'theme'}
+                        className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-sm"
+                      >
+                        {t.cancel}
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <p className="text-base text-gray-900">
                     {theme === 'light' ? t.light : theme === 'dark' ? t.dark : t.auto}
                   </p>
                 )}
+                {fieldErrors.theme && (
+                  <p className="text-sm text-red-600 mt-1">{fieldErrors.theme}</p>
+                )}
+                {fieldSuccess.theme && (
+                  <p className="text-sm text-green-600 mt-1">{t.saveSuccess}</p>
+                )}
               </div>
             </div>
 
             {/* Action Buttons */}
-            <div className="pt-6 border-t border-gray-200 flex gap-3">
-              {isEditing ? (
-                <>
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
-                  >
-                    <Save className="w-4 h-4" />
-                    {saving ? 'Saving...' : t.save}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setIsEditing(false)
-                      fetchProfile(user.id) // Reset form
-                    }}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
-                  >
-                    {t.cancel}
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
-                >
-                  <LogOut className="w-4 h-4" />
-                  {t.logout}
-                </button>
-              )}
+            <div className="pt-6 border-t border-gray-200">
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+              >
+                <LogOut className="w-4 h-4" />
+                {t.logout}
+              </button>
             </div>
           </div>
         </div>

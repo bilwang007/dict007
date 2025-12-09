@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:local": "node test-local.js",
+    "test:system": "node system-tests.js",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
@@ -30,6 +31,7 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "autoprefixer": "^10.4.0",
+    "dotenv": "^17.2.3",
     "eslint": "^8.56.0",
     "eslint-config-next": "^14.2.0",
     "postcss": "^8.4.0",

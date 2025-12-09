@@ -142,6 +142,7 @@ CREATE TABLE IF NOT EXISTS public.notebook_entries (
   native_language TEXT NOT NULL,
   definition TEXT NOT NULL,
   definition_target TEXT,
+  meaning_index INTEGER, -- Index of meaning (1, 2, 3, etc.) - NULL for single meaning entries
   image_url TEXT,
   audio_url TEXT,
   example_sentence_1 TEXT,
@@ -153,7 +154,18 @@ CREATE TABLE IF NOT EXISTS public.notebook_entries (
   first_learned_date TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, word, target_language, native_language)
+  -- Updated unique constraint to allow multiple meanings
+  CONSTRAINT notebook_entries_user_word_lang_meaning_unique 
+    UNIQUE (user_id, word, target_language, native_language, COALESCE(meaning_index, -1)),
+  -- Validation constraints
+  CONSTRAINT check_meaning_index_positive 
+    CHECK (meaning_index IS NULL OR meaning_index > 0),
+  CONSTRAINT check_word_not_empty 
+    CHECK (LENGTH(TRIM(word)) > 0),
+  CONSTRAINT check_target_language_format 
+    CHECK (LENGTH(TRIM(target_language)) BETWEEN 2 AND 5),
+  CONSTRAINT check_native_language_format 
+    CHECK (LENGTH(TRIM(native_language)) BETWEEN 2 AND 5)
 );
 
 -- Indexes for notebook_entries (only create if table and columns exist)
@@ -172,7 +184,16 @@ BEGIN
                WHERE table_schema = 'public' 
                AND table_name = 'notebook_entries' 
                AND column_name = 'word') THEN
-      CREATE INDEX IF NOT EXISTS idx_notebook_entries_word ON notebook_entries(word, target_language, native_language);
+      CREATE INDEX IF NOT EXISTS idx_notebook_entries_word_lookup ON notebook_entries(user_id, word, target_language, native_language);
+    END IF;
+    -- Index for meaning_index lookups
+    IF EXISTS (SELECT 1 FROM information_schema.columns 
+               WHERE table_schema = 'public' 
+               AND table_name = 'notebook_entries' 
+               AND column_name = 'meaning_index') THEN
+      CREATE INDEX IF NOT EXISTS idx_notebook_entries_meaning_index 
+        ON notebook_entries(user_id, word, target_language, native_language, meaning_index)
+        WHERE meaning_index IS NOT NULL;
     END IF;
     IF EXISTS (SELECT 1 FROM information_schema.columns 
                WHERE table_schema = 'public' 

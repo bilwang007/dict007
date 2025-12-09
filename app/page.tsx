@@ -47,8 +47,7 @@ export default function Home() {
       const newResult = event.detail
       setRegeneratedResult(newResult)
       setShowSaveRegeneratedPrompt(true)
-      // Update image asynchronously
-      loadImageAsync(newResult.word, newResult.definition)
+      // Image generation removed - user must click button manually
     }
     window.addEventListener('definitionRegenerated', handleRegeneration as EventListener)
     return () => window.removeEventListener('definitionRegenerated', handleRegeneration as EventListener)
@@ -107,7 +106,8 @@ export default function Home() {
     setMinLoadingTime(false)
 
     const startTime = Date.now()
-    const MIN_LOADING_DURATION = 1500 // Minimum 1.5 seconds for smooth animation
+    // Consistent minimum loading time for smooth animation (like LLM generation)
+    const MIN_LOADING_DURATION = 2000 // 2 seconds minimum for consistent animation
 
     // Check cache first
     const cacheKey = `lookup_${word}_${targetLanguage}_${nativeLanguage}`
@@ -122,20 +122,18 @@ export default function Home() {
             const filtered = prev.filter(w => w !== word) // Remove if already exists
             return [word, ...filtered].slice(0, 3) // Add to front, keep max 3
           })
-          // Show loading animation even for cached results
+          // Show consistent typing animation for cached results
           setLoadingResult(cachedData.data)
           setMinLoadingTime(true)
           const elapsed = Date.now() - startTime
           const remainingTime = Math.max(0, MIN_LOADING_DURATION - elapsed)
           
           setTimeout(() => {
-          setResult(cachedData.data)
-          setIsLoading(false)
+            setResult(cachedData.data)
+            setIsLoading(false)
             setLoadingResult(null)
             setMinLoadingTime(false)
           }, remainingTime)
-          // Load image asynchronously
-          loadImageAsync(word, cachedData.data.definition)
           return
         }
       } catch (e) {
@@ -144,6 +142,10 @@ export default function Home() {
     }
 
     try {
+      // Show loading state immediately
+      setLoadingResult({ word, definitionTarget: '', definition: '', examples: [], usageNote: '' })
+      setMinLoadingTime(true)
+      
       const response = await fetch('/api/lookup', {
         method: 'POST',
         headers: {
@@ -168,16 +170,15 @@ export default function Home() {
         return [word, ...filtered].slice(0, 3) // Add to front, keep max 3
       })
       
-      // Always show typing animation, even for fast database responses
+      // Update loading result with actual data for typing animation
       setLoadingResult(data)
-      setMinLoadingTime(true)
       
-      // Ensure minimum loading time for smooth animation (especially for database lookups)
+      // Ensure minimum loading time for consistent animation (like LLM generation)
       const elapsed = Date.now() - startTime
       const remainingTime = Math.max(0, MIN_LOADING_DURATION - elapsed)
       
       setTimeout(() => {
-      setResult(data)
+        setResult(data)
         setIsLoading(false)
         setLoadingResult(null)
         setMinLoadingTime(false)
@@ -190,13 +191,11 @@ export default function Home() {
           timestamp: Date.now(),
         }))
       }
-
-      // Load image asynchronously (don't block)
-      loadImageAsync(word, data.definition)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to lookup word')
       setIsLoading(false)
       setLoadingResult(null)
+      setMinLoadingTime(false)
     }
   }
 
@@ -234,31 +233,73 @@ export default function Home() {
     setIsSaving(true)
     setSaveStatus('idle')
     try {
-      const savedEntry = saveNotebookEntry({
-        word: result.word,
-        phonetic: result.phonetic || undefined,
-        targetLanguage,
-        nativeLanguage,
-        definition: result.definition,
-        definitionTarget: result.definitionTarget || '',
-        imageUrl: result.imageUrl || undefined,
-        audioUrl: undefined, // Audio generated on-demand
-        exampleSentence1: result.examples[0]?.sentence || '',
-        exampleSentence2: result.examples[1]?.sentence || '',
-        exampleTranslation1: result.examples[0]?.translation || '',
-        exampleTranslation2: result.examples[1]?.translation || '',
-        usageNote: result.usageNote,
-      } as any, true) // Always replace if exists
-      
-      console.log('Entry saved:', savedEntry)
-      
-      // Trigger custom event so notebook page can refresh if open
-      window.dispatchEvent(new CustomEvent('notebookUpdated'))
-      
-      setSaveStatus('saved')
-      setIsSaved(true)
-      // Auto-hide notification after 3 seconds
-      setTimeout(() => setSaveStatus('idle'), 3000)
+      // If multiple meanings exist, save each one separately
+      if (result.meanings && result.meanings.length > 1) {
+        let savedCount = 0
+        result.meanings.forEach((meaning, index) => {
+          try {
+            const savedEntry = saveNotebookEntry({
+              word: result.word,
+              phonetic: result.phonetic || undefined,
+              targetLanguage,
+              nativeLanguage,
+              definition: meaning.definition,
+              definitionTarget: meaning.definitionTarget,
+              meaningIndex: meaning.meaningIndex, // Store meaning index
+              imageUrl: meaning.imageUrl || undefined,
+              audioUrl: undefined, // Audio generated on-demand
+              exampleSentence1: meaning.examples[0]?.sentence || '',
+              exampleSentence2: meaning.examples[1]?.sentence || '',
+              exampleTranslation1: meaning.examples[0]?.translation || '',
+              exampleTranslation2: meaning.examples[1]?.translation || '',
+              usageNote: result.usageNote,
+            } as any, true) // Always replace if exists
+            savedCount++
+            console.log(`Entry saved for meaning ${meaning.meaningIndex}:`, savedEntry)
+          } catch (err) {
+            console.error(`Error saving meaning ${meaning.meaningIndex}:`, err)
+          }
+        })
+        
+        if (savedCount > 0) {
+          // Trigger custom event so notebook page can refresh if open
+          window.dispatchEvent(new CustomEvent('notebookUpdated'))
+          
+          setSaveStatus('saved')
+          setIsSaved(true)
+          // Auto-hide notification after 3 seconds
+          setTimeout(() => setSaveStatus('idle'), 3000)
+        } else {
+          throw new Error('Failed to save any meanings')
+        }
+      } else {
+        // Single meaning - save as before
+        const savedEntry = saveNotebookEntry({
+          word: result.word,
+          phonetic: result.phonetic || undefined,
+          targetLanguage,
+          nativeLanguage,
+          definition: result.definition,
+          definitionTarget: result.definitionTarget || '',
+          imageUrl: result.imageUrl || undefined,
+          audioUrl: undefined, // Audio generated on-demand
+          exampleSentence1: result.examples[0]?.sentence || '',
+          exampleSentence2: result.examples[1]?.sentence || '',
+          exampleTranslation1: result.examples[0]?.translation || '',
+          exampleTranslation2: result.examples[1]?.translation || '',
+          usageNote: result.usageNote,
+        } as any, true) // Always replace if exists
+        
+        console.log('Entry saved:', savedEntry)
+        
+        // Trigger custom event so notebook page can refresh if open
+        window.dispatchEvent(new CustomEvent('notebookUpdated'))
+        
+        setSaveStatus('saved')
+        setIsSaved(true)
+        // Auto-hide notification after 3 seconds
+        setTimeout(() => setSaveStatus('idle'), 3000)
+      }
     } catch (err) {
       console.error('Error saving to notebook:', err)
       setSaveStatus('error')
@@ -458,6 +499,7 @@ export default function Home() {
               examples={loadingResult.examples}
               usageNote={loadingResult.usageNote}
               source={loadingResult.source}
+              isLoadingExamples={!loadingResult.examples || loadingResult.examples.length === 0}
             />
           </div>
         )}

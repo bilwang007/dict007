@@ -40,17 +40,161 @@ export const openai = new Proxy({} as OpenAI, {
 
 interface LookupResult {
   definition: string
+  definitionTarget: string
   examples: Array<{ sentence: string; translation: string }>
   usageNote: string
+  isValidWord?: boolean
+  suggestedWord?: string
+  phonetic?: string
+}
+
+// Helper function to parse definitions into individual meanings
+export function parseMeanings(definitionTarget: string, definition: string): Array<{ definitionTarget: string; definition: string }> {
+  const meanings: Array<{ definitionTarget: string; definition: string }> = []
+  
+  // Try multiple patterns for splitting numbered lists
+  // Pattern 1: Standard numbered list (1. 2. 3.)
+  const numberedPattern1 = /(\d+\.\s[^\d]+?)(?=\s\d+\.|$)/g
+  // Pattern 2: Chinese numbered list (1. 2. 3. or 一、二、三、)
+  const numberedPattern2 = /(\d+\.\s[^0-9一二三四五六七八九十]+?)(?=\s\d+\.|$)/g
+  // Pattern 3: Pattern with Chinese punctuation (1. 名词：... 2. 动词：...)
+  const numberedPattern3 = /(\d+\.\s[^0-9]+?)(?=\s*\d+\.|$)/gs
+  
+  // Try to split target language (English) by numbered list
+  let targetMatches = definitionTarget.match(numberedPattern1)
+  if (!targetMatches || targetMatches.length < 2) {
+    targetMatches = definitionTarget.match(numberedPattern2)
+  }
+  if (!targetMatches || targetMatches.length < 2) {
+    targetMatches = definitionTarget.match(numberedPattern3)
+  }
+  
+  if (targetMatches && targetMatches.length > 1) {
+    // Split definition (native/Chinese) - try multiple patterns
+    let defMatches = definition.match(numberedPattern1)
+    if (!defMatches || defMatches.length < 2) {
+      defMatches = definition.match(numberedPattern2)
+    }
+    if (!defMatches || defMatches.length < 2) {
+      defMatches = definition.match(numberedPattern3)
+    }
+    
+    // If Chinese definition has numbered items matching English count
+    if (defMatches && defMatches.length === targetMatches.length) {
+      // Perfect match - pair them up
+      targetMatches.forEach((match, index) => {
+        const cleanedTarget = match.replace(/^\d+\.\s*/, '').trim()
+        const cleanedDef = defMatches![index].replace(/^\d+\.\s*/, '').trim()
+        
+        if (cleanedTarget) {
+          meanings.push({
+            definitionTarget: cleanedTarget,
+            definition: cleanedDef,
+          })
+        }
+      })
+    } else {
+      // Chinese definition doesn't have matching numbered items
+      // Try to split by Chinese separators or match semantically
+      // Pattern for Chinese: "1. 名词：... 2. 名词：..." or "1. ... 2. ..."
+      const chineseNumberedPattern = /(\d+\.\s*[^0-9]+?)(?=\s*\d+\.|$)/gs
+      const chineseMatches = definition.match(chineseNumberedPattern)
+      
+      if (chineseMatches && chineseMatches.length === targetMatches.length) {
+        // Match found with Chinese pattern
+        targetMatches.forEach((match, index) => {
+          const cleanedTarget = match.replace(/^\d+\.\s*/, '').trim()
+          const cleanedDef = chineseMatches[index].replace(/^\d+\.\s*/, '').trim()
+          
+          if (cleanedTarget) {
+            meanings.push({
+              definitionTarget: cleanedTarget,
+              definition: cleanedDef,
+            })
+          }
+        })
+      } else {
+        // Fallback: Try to extract by part of speech markers in Chinese
+        // Look for patterns like "名词：" "动词：" "形容词：" etc.
+        const posPattern = /(名词|动词|形容词|副词|介词|连词|代词|数词|量词|叹词|拟声词)[：:]\s*([^名词动词形容词副词介词连词代词数词量词叹词拟声词]+?)(?=\d+\.|名词|动词|形容词|副词|介词|连词|代词|数词|量词|叹词|拟声词|$)/g
+        const posMatches = [...definition.matchAll(posPattern)]
+        
+        if (posMatches.length === targetMatches.length) {
+          targetMatches.forEach((match, index) => {
+            const cleanedTarget = match.replace(/^\d+\.\s*/, '').trim()
+            const cleanedDef = posMatches[index] ? posMatches[index][0].trim() : ''
+            
+            if (cleanedTarget && cleanedDef) {
+              meanings.push({
+                definitionTarget: cleanedTarget,
+                definition: cleanedDef,
+              })
+            }
+          })
+        } else {
+          // Last resort: Split Chinese by common separators and match by index
+          // This is less accurate but better than showing all meanings for each
+          const chineseParts = definition.split(/[。；;]\s*(?=\d+\.|$)/).filter(p => p.trim())
+          
+          targetMatches.forEach((match, index) => {
+            const cleanedTarget = match.replace(/^\d+\.\s*/, '').trim()
+            // Try to find the corresponding Chinese part
+            // Look for the part that contains the same number or is at the same index
+            let cleanedDef = ''
+            
+            // First try: Find Chinese part with matching number
+            const targetNum = match.match(/^\d+/)?.[0]
+            if (targetNum) {
+              const matchingChinese = chineseParts.find(p => p.trim().startsWith(targetNum + '.'))
+              if (matchingChinese) {
+                cleanedDef = matchingChinese.replace(/^\d+\.\s*/, '').trim()
+              }
+            }
+            
+            // Fallback: Use by index if available
+            if (!cleanedDef && chineseParts[index]) {
+              cleanedDef = chineseParts[index].replace(/^\d+\.\s*/, '').trim()
+            }
+            
+            // Final fallback: Use full definition (but this is what we're trying to avoid)
+            if (!cleanedDef) {
+              cleanedDef = definition
+            }
+            
+            if (cleanedTarget) {
+              meanings.push({
+                definitionTarget: cleanedTarget,
+                definition: cleanedDef,
+              })
+            }
+          })
+        }
+      }
+    }
+  } else {
+    // Single meaning - return as is
+    meanings.push({
+      definitionTarget: definitionTarget.trim(),
+      definition: definition.trim(),
+    })
+  }
+  
+  return meanings
 }
 
 export async function generateDefinition(
   word: string,
   targetLanguage: string,
-  nativeLanguage: string
+  nativeLanguage: string,
+  wikipediaDefinition?: string
 ): Promise<LookupResult> {
   const targetLangName = getLanguageName(targetLanguage)
   const nativeLangName = getLanguageName(nativeLanguage)
+
+  // Build prompt with Wikipedia definition if available
+  const wikiContext = wikipediaDefinition 
+    ? `\n\n📚 WIKIPEDIA DEFINITION (PRIMARY SOURCE):\n${wikipediaDefinition}\n\nUse this as the PRIMARY source for the definition. Your role is to:\n1. Use the Wikipedia definition as the main definition\n2. Generate example sentences\n3. Provide usage notes\n4. Translate to ${nativeLangName} if needed`
+    : ''
 
   const prompt = `You are a helpful language learning assistant. The user is learning ${targetLangName} and their native language is ${nativeLangName}.
 
@@ -64,7 +208,7 @@ YOU MUST:
 4. DO NOT use the definition of a similar word
 5. If "${word}" is misspelled, define "${word}" itself, not the correct spelling
 
-🔍 COMPREHENSIVE DEFINITION REQUIREMENT:
+${wikiContext ? wikiContext : `🔍 COMPREHENSIVE DEFINITION REQUIREMENT:
 - You MUST provide a COMPREHENSIVE definition that covers ALL major meanings of "${word}"
 - Reference authoritative sources like Wikipedia, Oxford Dictionary, Cambridge Dictionary, Merriam-Webster, or other reputable dictionaries
 - For words with multiple meanings (polysemy), list ALL primary meanings clearly
@@ -72,7 +216,7 @@ YOU MUST:
   * Verb: to go away from, to depart, to abandon
   * Noun: permission to be absent, vacation time, or a leaf (archaic/homophone)
 - Organize multiple meanings clearly, starting with the most common usage
-- Ensure the definition covers all major parts of speech (noun, verb, adjective, etc.) if applicable
+- Ensure the definition covers all major parts of speech (noun, verb, adjective, etc.) if applicable`}
 
 If "${word}" is not a recognized word in ${targetLangName}:
 - Set "isValidWord" to false
@@ -105,22 +249,34 @@ CRITICAL LANGUAGE REQUIREMENTS - READ CAREFULLY:
 
 IMPORTANT: The definitionTarget MUST be a complete, natural definition in ${targetLangName}, not just a translation. It should explain what the word means in ${targetLangName}. For words with multiple meanings, organize them clearly (e.g., "1. [meaning 1] 2. [meaning 2]" or use clear separators).
 
+${wikipediaDefinition ? 'NOTE: Use the Wikipedia definition provided above as the PRIMARY source. Format it properly and ensure it covers all meanings.' : ''}
+
 Respond with ONLY a JSON object in this exact format (no markdown, no code blocks):
 {
   "phonetic": "Phonetic transcription (音标) in IPA format for "${word}". For English, use IPA like /ˈwɜːrd/. For Chinese, use Pinyin like "hàn yǔ". For other languages, use the standard phonetic notation. If the word is not recognized, you may omit this field or use an approximation.",
-  "definitionTarget": "A COMPREHENSIVE definition written entirely in ${targetLangName}. MUST cover ALL major meanings of the word. For words with multiple meanings (like 'leave', 'bank', 'run'), list ALL primary meanings clearly and organized. Reference authoritative sources. Start with the most common meaning. Format: '1. [meaning 1] 2. [meaning 2]' or use clear separators. Be direct, concise, and friendly. No greetings or fillers.",
-  "definition": "A COMPREHENSIVE translation or explanation written entirely in ${nativeLangName}. MUST cover ALL major meanings matching the definitionTarget. This helps the user understand the word in their native language. Be direct, concise, and friendly. No greetings or fillers. Get straight to the point.",
+  "definitionTarget": "${wikipediaDefinition ? 'Format the Wikipedia definition provided above. ' : ''}A COMPREHENSIVE definition written entirely in ${targetLangName}. MUST cover ALL major meanings of the word. For words with multiple meanings (like 'leave', 'bank', 'run'), list ALL primary meanings clearly and organized. ${wikipediaDefinition ? 'Base this on the Wikipedia definition provided. ' : 'Reference authoritative sources. '}Start with the most common meaning. Format: '1. [meaning 1] 2. [meaning 2]' or use clear separators. Be direct, concise, and friendly. No greetings or fillers.",
+  "definition": "A COMPREHENSIVE translation or explanation written entirely in ${nativeLangName}. MUST cover ALL major meanings matching the definitionTarget EXACTLY in the same order and format. If definitionTarget has '1. [meaning 1] 2. [meaning 2]', then definition MUST have '1. [translation 1] 2. [translation 2]' in the EXACT same order. Each numbered item in definition must correspond to the same numbered item in definitionTarget. This helps the user understand the word in their native language. Be direct, concise, and friendly. No greetings or fillers. Get straight to the point.",
   "examples": [
     {
-      "sentence": "Example sentence 1 written entirely in ${targetLangName} language",
-      "translation": "Translation of sentence 1 written entirely in ${nativeLangName} language"
+      "sentence": "Example sentence 1 written entirely in ${targetLangName} language that demonstrates meaning 1",
+      "translation": "Translation of sentence 1 written entirely in ${nativeLangName} language",
+      "meaningIndex": 1
     },
     {
-      "sentence": "Example sentence 2 written entirely in ${targetLangName} language",
-      "translation": "Translation of sentence 2 written entirely in ${nativeLangName} language"
+      "sentence": "Example sentence 2 written entirely in ${targetLangName} language that demonstrates meaning 1",
+      "translation": "Translation of sentence 2 written entirely in ${nativeLangName} language",
+      "meaningIndex": 1
     }
   ],
   "usageNote": "A fun, lively, casual explanation about cultural nuance, tone/voice, related words, synonyms, homophones, or words that look similar and differ in usage. If the word has multiple meanings, mention how to distinguish them in context. Write like you're talking to a friend - be concise, engaging, and get to the point immediately. No textbook language.",
+  
+CRITICAL INSTRUCTIONS FOR EXAMPLES:
+- If the word has multiple meanings (e.g., "1. Noun: bank (financial) 2. Noun: bank (river) 3. Verb: to bank"), you MUST provide examples for EACH meaning.
+- Set "meaningIndex" to the number of the meaning (1, 2, 3, etc.) that the example demonstrates.
+- Provide at least 2 examples per meaning.
+- Examples should clearly demonstrate the specific meaning they're assigned to.
+- Example: For "bank" meaning 1 (financial institution), use "I need to go to the bank" (meaningIndex: 1).
+- Example: For "bank" meaning 2 (river edge), use "We sat on the river bank" (meaningIndex: 2).
   "isValidWord": true,
   "suggestedWord": ""
 }
@@ -213,6 +369,12 @@ IMPORTANT: Set "isValidWord" to false if "${word}" is not a recognized word in $
       
       // Final check: Ensure the word in result matches what was searched
       // The word should always be exactly what was searched
+      
+      // Ensure definitionTarget is set
+      if (!result.definitionTarget || result.definitionTarget.trim() === '') {
+        result.definitionTarget = result.definition || ''
+      }
+      
     return result
   } catch (error) {
     console.error('Failed to parse OpenAI response:', content)
@@ -220,12 +382,75 @@ IMPORTANT: Set "isValidWord" to false if "${word}" is not a recognized word in $
   }
 }
 
-export async function generateImage(prompt: string): Promise<string> {
+// Fetch definition from Wikipedia
+export async function fetchWikipediaDefinition(
+  word: string,
+  targetLanguage: string
+): Promise<{ definition: string; extract: string } | null> {
+  try {
+    // Map language codes to Wikipedia language codes
+    const wikiLangMap: Record<string, string> = {
+      en: 'en',
+      es: 'es',
+      zh: 'zh',
+      hi: 'hi',
+      ar: 'ar',
+      pt: 'pt',
+      bn: 'bn',
+      ru: 'ru',
+      ja: 'ja',
+      fr: 'fr',
+    }
+    
+    const wikiLang = wikiLangMap[targetLanguage] || 'en'
+    
+    // Try to fetch from Wikipedia API
+    const apiUrl = `https://${wikiLang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(word)}`
+    
+    const response = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'DictionaryApp/1.0 (https://example.com)',
+      },
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      if (data.extract && data.extract.length > 0) {
+        return {
+          definition: data.extract.substring(0, 500), // Limit length
+          extract: data.extract,
+        }
+      }
+    }
+  } catch (error) {
+    console.log('Wikipedia fetch failed:', error)
+  }
+  
+  return null
+}
+
+export async function generateImage(
+  prompt: string,
+  meaningContext?: string
+): Promise<string> {
   // Use Unsplash API for image generation
   if (process.env.UNSPLASH_ACCESS_KEY) {
     try {
-      // Extract the main word from the prompt (first word before any dashes or descriptions)
-      const searchQuery = prompt.split(' - ')[0].split(',')[0].trim()
+      // If meaning context is provided, use it to create a more specific search query
+      let searchQuery = prompt.split(' - ')[0].split(',')[0].trim()
+      
+      if (meaningContext) {
+        // Include the specific meaning in the search query for better image results
+        // Extract key words from the meaning context
+        const meaningWords = meaningContext
+          .substring(0, 50)
+          .split(/\s+/)
+          .filter(w => w.length > 3)
+          .slice(0, 3)
+          .join(' ')
+        searchQuery = `${searchQuery} ${meaningWords}`.trim()
+      }
+      
       const encodedQuery = encodeURIComponent(searchQuery)
       
       const unsplashResponse = await fetch(
@@ -258,8 +483,11 @@ export async function generateImage(prompt: string): Promise<string> {
   }
   
   // Final fallback: Use Unsplash source (no API key, less reliable)
-  const unsplashQuery = encodeURIComponent(prompt.substring(0, 50))
-  const fallbackUrl = `https://source.unsplash.com/800x600/?${unsplashQuery}`
+  let unsplashQuery = prompt.substring(0, 50)
+  if (meaningContext) {
+    unsplashQuery = `${prompt.substring(0, 30)} ${meaningContext.substring(0, 20)}`
+  }
+  const fallbackUrl = `https://source.unsplash.com/800x600/?${encodeURIComponent(unsplashQuery)}`
   console.log('Using Unsplash fallback:', fallbackUrl)
   return fallbackUrl
 }

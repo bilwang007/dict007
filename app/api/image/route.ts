@@ -4,7 +4,7 @@ import { generateImage } from '@/app/lib/ai'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { word, definition } = body
+    const { word, definition, meaningContext } = body
 
     if (!word) {
       return NextResponse.json(
@@ -13,8 +13,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate image
-    const imageUrl = await generateImage(`${word} - ${(definition || '').substring(0, 100)}`)
+    // Generate image with meaning context if provided (for better image matching specific meaning)
+    const prompt = `${word} - ${(definition || '').substring(0, 100)}`
+    const imageUrl = await generateImage(prompt, meaningContext)
 
     return NextResponse.json({ imageUrl })
   } catch (error) {
