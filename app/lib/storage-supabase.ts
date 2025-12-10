@@ -165,7 +165,7 @@ export async function saveNotebookEntry(
       .eq('id', existing.id)
       .select()
       .single()
-    
+
     if (error) {
       if (error.code === '42703' || error.message?.includes('meaning_index')) {
         console.error('❌ Database schema error: meaning_index column missing.')

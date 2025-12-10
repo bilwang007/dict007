@@ -244,14 +244,16 @@ export async function POST(request: NextRequest) {
       const llmPromise = generateDefinition(sanitizedWord, targetLanguage, nativeLanguage)
       
       // Wait for Wikipedia first (usually faster), but don't wait too long
+      // Reduced timeout for faster response - return Wikipedia immediately if available
       const wikiResult = await Promise.race([
         wikiPromise,
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)) // 2 second timeout
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 500)) // 500ms timeout for even faster response
       ])
       
       if (wikiResult) {
         source = 'wikipedia'
-        // Use Wikipedia definition, but get examples from LLM (already in progress)
+        // Return Wikipedia definition immediately, LLM will enhance with examples
+        // This allows step-by-step display: Wikipedia first, then LLM examples
         const llmResult = await llmPromise
         definitionResult = {
           ...llmResult,
@@ -260,9 +262,9 @@ export async function POST(request: NextRequest) {
         } as DefinitionResult
       } else {
         // Wikipedia failed or timed out, use LLM result
-      source = 'llm'
+        source = 'llm'
         const llmResult = await llmPromise
-      definitionResult = llmResult as DefinitionResult
+        definitionResult = llmResult as DefinitionResult
       }
       
       // NOTE: We do NOT automatically save to the shared dictionary (word_definitions).

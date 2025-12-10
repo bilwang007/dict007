@@ -251,9 +251,12 @@ export default function ProfilePage() {
         
         // Apply UI language immediately if changed
         if (fieldName === 'uiLanguage' && typeof window !== 'undefined') {
-          // Reload page to apply new language (or use a more elegant solution)
-          // For now, just update localStorage
+          // Update localStorage
           localStorage.setItem('uiLanguage', value)
+          // Update state to reflect change immediately
+          setUiLanguage(value as 'en' | 'zh')
+          // Note: Language change will apply on next navigation or component remount
+          // Full page reload removed to prevent authentication issues
         }
         
         // Clear success message after 2 seconds
@@ -342,7 +345,10 @@ export default function ProfilePage() {
               <div className="flex-1">
                 {editingField === 'fullName' ? (
                   <div className="flex items-center gap-2 mb-2">
+                    <label htmlFor="fullName-input" className="sr-only">{t.fullName}</label>
                     <input
+                      id="fullName-input"
+                      name="fullName"
                       type="text"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
@@ -420,7 +426,10 @@ export default function ProfilePage() {
                 </div>
                 {editingField === 'bio' ? (
                   <div className="space-y-2">
+                    <label htmlFor="bio-textarea" className="sr-only">{t.bio}</label>
                     <textarea
+                      id="bio-textarea"
+                      name="bio"
                       value={bio}
                       onChange={(e) => setBio(e.target.value)}
                       placeholder={t.enterBio}
@@ -475,7 +484,10 @@ export default function ProfilePage() {
                 </div>
                 {editingField === 'uiLanguage' ? (
                   <div className="space-y-2">
+                    <label htmlFor="uiLanguage-select" className="sr-only">{t.uiLanguage}</label>
                     <select
+                      id="uiLanguage-select"
+                      name="uiLanguage"
                       value={uiLanguage}
                       onChange={(e) => {
                         const newValue = e.target.value as 'en' | 'zh'
@@ -614,7 +626,10 @@ export default function ProfilePage() {
                 </div>
                 {editingField === 'learningGoals' ? (
                   <div className="space-y-2">
+                    <label htmlFor="learningGoals-textarea" className="sr-only">{t.learningGoals}</label>
                     <textarea
+                      id="learningGoals-textarea"
+                      name="learningGoals"
                       value={learningGoals}
                       onChange={(e) => setLearningGoals(e.target.value)}
                       placeholder={t.enterGoals}
@@ -669,7 +684,10 @@ export default function ProfilePage() {
                 {editingField === 'dailyGoal' ? (
                   <div className="space-y-2">
                     <div className="flex items-center gap-3">
+                      <label htmlFor="dailyGoal-input" className="sr-only">{t.dailyGoal}</label>
                       <input
+                        id="dailyGoal-input"
+                        name="dailyGoal"
                         type="number"
                         value={dailyGoal}
                         onChange={(e) => setDailyGoal(parseInt(e.target.value) || 10)}
@@ -727,8 +745,10 @@ export default function ProfilePage() {
                 </div>
                 {editingField === 'notificationEnabled' ? (
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
+                    <label htmlFor="notificationEnabled-checkbox" className="flex items-center gap-2 cursor-pointer">
                       <input
+                        id="notificationEnabled-checkbox"
+                        name="notificationEnabled"
                         type="checkbox"
                         checked={notificationEnabled}
                         onChange={(e) => setNotificationEnabled(e.target.checked)}
@@ -783,7 +803,10 @@ export default function ProfilePage() {
                 </div>
                 {editingField === 'theme' ? (
                   <div className="space-y-2">
+                    <label htmlFor="theme-select" className="sr-only">{t.theme}</label>
                     <select
+                      id="theme-select"
+                      name="theme"
                       value={theme}
                       onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'auto')}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"

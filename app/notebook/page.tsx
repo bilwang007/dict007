@@ -23,16 +23,20 @@ export default function NotebookPage() {
   const [entries, setEntries] = useState<NotebookEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [story, setStory] = useState<Story | null>(null)
   const [isGeneratingStory, setIsGeneratingStory] = useState(false)
   const [showBatchUpload, setShowBatchUpload] = useState(false)
+  const [showFormUpload, setShowFormUpload] = useState(false)
+  const [formWords, setFormWords] = useState('')
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
   const [showBatchTag, setShowBatchTag] = useState(false)
   const [newTag, setNewTag] = useState('')
   const [availableTags, setAvailableTags] = useState<string[]>([])
+  const [recentTags, setRecentTags] = useState<string[]>([])
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(null)
   const [targetLanguage, setTargetLanguage] = useState<LanguageCode>('en')
@@ -97,6 +101,9 @@ export default function NotebookPage() {
     getAllTags()
       .then(tags => setAvailableTags(tags))
       .catch(() => setAvailableTags([]))
+    // Load recent tags from localStorage
+    const recent = JSON.parse(localStorage.getItem('recentTags') || '[]')
+    setRecentTags(recent)
     
     // Safety timeout - ensure loading doesn't last forever
     const timeout = setTimeout(() => {
@@ -205,7 +212,8 @@ export default function NotebookPage() {
       })
     } catch (error) {
       console.error('Error deleting entry:', error)
-      alert('Failed to delete entry')
+      setMessage({ text: 'Failed to delete entry', type: 'error' })
+      setTimeout(() => setMessage(null), 3000)
     } finally {
       setDeletingId(null)
     }
@@ -230,6 +238,86 @@ export default function NotebookPage() {
     } else {
       // Select all filtered entries
       setSelectedIds(new Set(filteredEntries.map(e => e.id)))
+    }
+  }
+
+  const handleFormUpload = async () => {
+    if (!formWords.trim()) {
+      setMessage({ text: 'Please enter at least one word', type: 'info' })
+      setTimeout(() => setMessage(null), 3000)
+      return
+    }
+
+    setIsUploading(true)
+    setUploadProgress({ current: 0, total: 0 })
+
+    try {
+      // Split by newlines, commas, or spaces
+      const words = formWords
+        .split(/[\n,]+/)
+        .map(w => w.trim())
+        .filter(w => w.length > 0)
+
+      if (words.length === 0) {
+        setMessage({ text: 'No valid words found', type: 'info' })
+        setTimeout(() => setMessage(null), 3000)
+        setIsUploading(false)
+        return
+      }
+
+      setUploadProgress({ current: 0, total: words.length })
+
+      let successCount = 0
+      for (let i = 0; i < words.length; i++) {
+        const word = words[i]
+        try {
+          // Lookup each word
+          const response = await fetch('/api/lookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              word,
+              targetLanguage,
+              nativeLanguage,
+            }),
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            // Save to notebook
+            await saveNotebookEntry({
+              word: data.word,
+              phonetic: data.phonetic || undefined,
+              targetLanguage,
+              nativeLanguage,
+              definition: data.definition || '',
+              definitionTarget: data.definitionTarget || '',
+              imageUrl: data.imageUrl || undefined,
+              exampleSentence1: data.examples?.[0]?.sentence || '',
+              exampleSentence2: data.examples?.[1]?.sentence || '',
+              exampleTranslation1: data.examples?.[0]?.translation || '',
+              exampleTranslation2: data.examples?.[1]?.translation || '',
+              usageNote: data.usageNote || '',
+            })
+            successCount++
+          }
+        } catch (error) {
+          console.error(`Failed to process word "${word}":`, error)
+        }
+        setUploadProgress({ current: i + 1, total: words.length })
+      }
+
+      setMessage({ text: `Upload complete! Success: ${successCount}/${words.length} words`, type: 'success' })
+      setTimeout(() => setMessage(null), 3000)
+      setFormWords('')
+      setShowFormUpload(false)
+      fetchEntries()
+    } catch (error: any) {
+      console.error('Form upload error:', error)
+      alert(`Upload failed: ${error.message}`)
+    } finally {
+      setIsUploading(false)
+      setUploadProgress({ current: 0, total: 0 })
     }
   }
 
@@ -282,7 +370,8 @@ export default function NotebookPage() {
         }
       }
       
-      alert(`Batch upload complete!\nSuccess: ${summary.success}/${summary.total}\nSaved: ${savedCount} words`)
+        setMessage({ text: `Batch upload complete! Success: ${summary.success}/${summary.total}, Saved: ${savedCount} words`, type: 'success' })
+        setTimeout(() => setMessage(null), 3000)
       fetchEntries()
       setShowBatchUpload(false)
       if (fileInputRef.current) {
@@ -290,31 +379,44 @@ export default function NotebookPage() {
       }
     } catch (error: any) {
       console.error('Batch upload error:', error)
-      alert(`Upload failed: ${error.message}`)
+      setMessage({ text: `Upload failed: ${error.message}`, type: 'error' })
+      setTimeout(() => setMessage(null), 5000)
     } finally {
       setIsUploading(false)
       setUploadProgress({ current: 0, total: 0 })
     }
   }
 
-  const handleBatchTag = async () => {
+  const handleBatchTag = async (tagToAdd?: string) => {
     if (selectedIds.size === 0) {
-      alert('Please select at least one entry to tag')
+      // Enable selection mode
+      setShowBatchTag(true)
       return
     }
     
-    if (!newTag.trim()) {
-      alert('Please enter a tag name')
+    const tag = tagToAdd || newTag.trim()
+    if (!tag) {
+      setMessage({ text: 'Please enter a tag name or select an existing tag', type: 'info' })
+      setTimeout(() => setMessage(null), 3000)
       return
     }
     
-    const tag = newTag.trim()
     const entryIds = Array.from(selectedIds)
     try {
       const count = await addTagsToEntries(entryIds, [tag])
       
       if (count > 0) {
-        alert(`Added tag "${tag}" to ${count} entries`)
+        // Add to recent tags
+        const recent = [...recentTags]
+        if (!recent.includes(tag)) {
+          recent.unshift(tag)
+          if (recent.length > 10) recent.pop() // Keep only last 10
+          setRecentTags(recent)
+          localStorage.setItem('recentTags', JSON.stringify(recent))
+        }
+        
+        setMessage({ text: `Added tag "${tag}" to ${count} entries`, type: 'success' })
+        setTimeout(() => setMessage(null), 3000)
         setNewTag('')
         const tags = await getAllTags()
         setAvailableTags(tags)
@@ -322,13 +424,15 @@ export default function NotebookPage() {
       }
     } catch (error) {
       console.error('Error adding tags:', error)
-      alert('Failed to add tags')
+      setMessage({ text: 'Failed to add tags', type: 'error' })
+      setTimeout(() => setMessage(null), 3000)
     }
   }
 
   const handleRemoveBatchTag = async (tag: string) => {
     if (selectedIds.size === 0) {
-      alert('Please select at least one entry')
+      setMessage({ text: 'Please select at least one entry', type: 'info' })
+      setTimeout(() => setMessage(null), 3000)
       return
     }
     
@@ -337,20 +441,23 @@ export default function NotebookPage() {
       const count = await removeTagsFromEntries(entryIds, [tag])
       
       if (count > 0) {
-        alert(`Removed tag "${tag}" from ${count} entries`)
+        setMessage({ text: `Removed tag "${tag}" from ${count} entries`, type: 'success' })
+        setTimeout(() => setMessage(null), 3000)
         const tags = await getAllTags()
         setAvailableTags(tags)
         fetchEntries()
       }
     } catch (error) {
       console.error('Error removing tags:', error)
-      alert('Failed to remove tags')
+      setMessage({ text: 'Failed to remove tags', type: 'error' })
+      setTimeout(() => setMessage(null), 3000)
     }
   }
 
   const handleGenerateStory = async () => {
     if (selectedIds.size === 0) {
-      alert('Please select at least one word to generate a story')
+      setMessage({ text: 'Please select at least one word to generate a story', type: 'info' })
+      setTimeout(() => setMessage(null), 3000)
       return
     }
 
@@ -406,7 +513,8 @@ export default function NotebookPage() {
       })
     } catch (error) {
       console.error('Error generating story:', error)
-      alert('Failed to generate story')
+      setMessage({ text: 'Failed to generate story', type: 'error' })
+      setTimeout(() => setMessage(null), 3000)
     } finally {
       setIsGeneratingStory(false)
     }
@@ -423,6 +531,54 @@ export default function NotebookPage() {
                   <h1 className="text-5xl font-light text-gray-900 tracking-tight mb-2">My Notebook</h1>
                   <p className="text-gray-500 text-lg">Your saved words and definitions</p>
                 </div>
+
+                {/* Batch Actions - At the top */}
+                {!isLoading && !error && (
+                  <div className="mb-6 flex flex-wrap gap-2">
+                    {/* Batch Upload Button */}
+                    <button
+                      onClick={() => {
+                        setShowBatchUpload(!showBatchUpload)
+                        setShowFormUpload(false)
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {showBatchUpload ? 'Hide Upload' : 'Batch Upload'}
+                    </button>
+                    
+                    {/* Form Upload Button */}
+                    <button
+                      onClick={() => {
+                        setShowFormUpload(!showFormUpload)
+                        setShowBatchUpload(false)
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+                    >
+                      <Upload className="w-4 h-4" />
+                      {showFormUpload ? 'Hide Form' : 'Form Upload'}
+                    </button>
+
+                    {/* Batch Tagging Button */}
+                    {filteredEntries.length > 0 && (
+                      <button
+                        onClick={() => {
+                          if (selectedIds.size === 0) {
+                            // Enable selection mode
+                            setShowBatchTag(true)
+                          } else {
+                            // Already have selection, toggle modal
+                            setShowBatchTag(!showBatchTag)
+                          }
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+                      >
+                        <Tag className="w-4 h-4" />
+                        {showBatchTag ? 'Hide Tags' : 'Batch Tag'}
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* Tag Filter - At the top */}
                 {!isLoading && !error && entries.length > 0 && (
@@ -510,6 +666,19 @@ export default function NotebookPage() {
                     )}
                   </div>
                 )}
+
+        {/* Inline Message */}
+        {message && (
+          <div className={`mb-6 p-4 rounded-lg border ${
+            message.type === 'success' 
+              ? 'bg-green-50 border-green-200 text-green-800' 
+              : message.type === 'error'
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : 'bg-blue-50 border-blue-200 text-blue-800'
+          }`}>
+            <p className="text-sm font-medium">{message.text}</p>
+          </div>
+        )}
 
         {/* Error State */}
         {error && (
@@ -609,28 +778,104 @@ export default function NotebookPage() {
           </div>
         )}
 
-        {/* Batch Actions - Small buttons at bottom */}
-        {!isLoading && !error && (
-          <div className="mt-8 pt-6 border-t border-gray-200 flex flex-wrap gap-2 justify-center">
-            {/* Batch Upload Button */}
-            <button
-              onClick={() => setShowBatchUpload(!showBatchUpload)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
-            >
-              <Upload className="w-4 h-4" />
-              {showBatchUpload ? 'Hide Upload' : 'Batch Upload'}
-            </button>
 
-            {/* Batch Tagging Button */}
-            {filteredEntries.length > 0 && (
-              <button
-                onClick={() => setShowBatchTag(!showBatchTag)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
-              >
-                <Tag className="w-4 h-4" />
-                {showBatchTag ? 'Hide Tags' : 'Batch Tag'}
-              </button>
-            )}
+        {/* Form Upload Modal */}
+        {showFormUpload && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Form Upload</h2>
+                <button
+                  onClick={() => setShowFormUpload(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Target Language
+                    </label>
+                    <select
+                      value={targetLanguage}
+                      onChange={(e) => setTargetLanguage(e.target.value as LanguageCode)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent text-sm"
+                    >
+                      {LANGUAGES.map(lang => (
+                        <option key={lang.code} value={lang.code}>{lang.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Native Language
+                    </label>
+                    <select
+                      value={nativeLanguage}
+                      onChange={(e) => setNativeLanguage(e.target.value as LanguageCode)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent text-sm"
+                    >
+                      {LANGUAGES.map(lang => (
+                        <option key={lang.code} value={lang.code}>{lang.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Enter Words (one per line, or separated by commas)
+                  </label>
+                  <textarea
+                    value={formWords}
+                    onChange={(e) => setFormWords(e.target.value)}
+                    placeholder="hello&#10;world&#10;bank&#10;study"
+                    rows={10}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent text-sm font-mono"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formWords.split(/[\n,]+/).filter(w => w.trim()).length} word(s) detected
+                  </p>
+                </div>
+
+                {isUploading && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm text-blue-800 mb-2">
+                      Uploading: {uploadProgress.current} / {uploadProgress.total}
+                    </p>
+                    <div className="w-full bg-blue-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all"
+                        style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleFormUpload}
+                    disabled={isUploading || !formWords.trim()}
+                    className="flex-1 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    {isUploading ? 'Uploading...' : 'Upload Words'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowFormUpload(false)
+                      setFormWords('')
+                    }}
+                    disabled={isUploading}
+                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 font-medium"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -732,11 +977,16 @@ export default function NotebookPage() {
         {/* Batch Tagging Modal */}
         {showBatchTag && entries.length > 0 && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full">
+            <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-semibold text-gray-900">Batch Tagging</h2>
                 <button
-                  onClick={() => setShowBatchTag(false)}
+                  onClick={() => {
+                    setShowBatchTag(false)
+                    if (selectedIds.size === 0) {
+                      setSelectedIds(new Set())
+                    }
+                  }}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <X className="w-5 h-5" />
@@ -744,54 +994,81 @@ export default function NotebookPage() {
               </div>
               
               <div className="space-y-4">
-                <p className="text-sm text-gray-600">
-                  {selectedIds.size > 0 
-                    ? `${selectedIds.size} entry(ies) selected` 
-                    : 'Select entries to tag them'}
-                </p>
-                
-                {/* Add Tag */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleBatchTag()}
-                    placeholder="Enter tag name"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent text-sm"
-                  />
-                  <button
-                    onClick={handleBatchTag}
-                    disabled={selectedIds.size === 0 || !newTag.trim()}
-                    className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
-                  >
-                    Add
-                  </button>
-                </div>
-                
-                {/* Available Tags */}
-                {availableTags.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 mb-2">Available Tags:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {availableTags.map(tag => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-xs"
-                        >
-                          {tag}
-                          {selectedIds.size > 0 && (
+                {selectedIds.size === 0 ? (
+                  <>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Select entries using checkboxes, then click "Batch Tag" again to tag them.
+                    </p>
+                    <button
+                      onClick={() => setShowBatchTag(false)}
+                      className="w-full px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+                    >
+                      Got it, I'll select entries first
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-600 font-medium">
+                      {selectedIds.size} entry(ies) selected
+                    </p>
+                    
+                    {/* Recent Tags */}
+                    {recentTags.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 mb-2">Recent Tags:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {recentTags.slice(0, 5).map(tag => (
                             <button
-                              onClick={() => handleRemoveBatchTag(tag)}
-                              className="ml-1 text-gray-500 hover:text-gray-700"
+                              key={tag}
+                              onClick={() => handleBatchTag(tag)}
+                              className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
                             >
-                              <X className="w-3 h-3" />
+                              {tag}
                             </button>
-                          )}
-                        </span>
-                      ))}
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Existing Tags */}
+                    {availableTags.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 mb-2">Existing Tags:</p>
+                        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                          {availableTags.map(tag => (
+                            <button
+                              key={tag}
+                              onClick={() => handleBatchTag(tag)}
+                              className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Add New Tag */}
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 mb-2">Create New Tag:</p>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newTag}
+                          onChange={(e) => setNewTag(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && handleBatchTag()}
+                          placeholder="Enter tag name"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent text-sm"
+                        />
+                        <button
+                          onClick={() => handleBatchTag()}
+                          className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+                        >
+                          Add
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
             </div>

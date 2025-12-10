@@ -268,7 +268,7 @@ Respond with ONLY a JSON object in this exact format (no markdown, no code block
       "meaningIndex": 1
     }
   ],
-  "usageNote": "A fun, lively, casual explanation about cultural nuance, tone/voice, related words, synonyms, homophones, or words that look similar and differ in usage. If the word has multiple meanings, mention how to distinguish them in context. Write like you're talking to a friend - be concise, engaging, and get to the point immediately. No textbook language.",
+  "usageNote": "A fun, lively, casual explanation about cultural nuance, tone/voice, related words, synonyms, homophones, or words that look similar and differ in usage. If the word has multiple meanings, mention how to distinguish them in context. Write like you're talking to a friend - be concise, engaging, and get to the point immediately. No textbook language. IMPORTANT: Provide the usage note in BOTH languages - first in ${targetLangName}, then in ${nativeLangName}, separated by a clear divider (e.g., '---' or '|'). Format: '[${targetLangName} explanation] | [${nativeLangName} explanation]' or similar bilingual format.",
   
 CRITICAL INSTRUCTIONS FOR EXAMPLES:
 - If the word has multiple meanings (e.g., "1. Noun: bank (financial) 2. Noun: bank (river) 3. Verb: to bank"), you MUST provide examples for EACH meaning.

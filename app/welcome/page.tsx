@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Search, BookOpen, GraduationCap, Sparkles, ImageIcon, Volume2, CheckCircle, ArrowRight, X } from 'lucide-react'
+import { Search, BookOpen, GraduationCap, Sparkles, ImageIcon, Volume2, CheckCircle, ArrowRight, X, Tag } from 'lucide-react'
 import Navigation from '../components/Navigation'
 import { createClient } from '../lib/supabase/client'
 
@@ -217,10 +217,80 @@ export default function WelcomePage() {
           {/* Step Content */}
           <div className="mb-8 min-h-[300px] flex flex-col items-center justify-center">
             <div className="mb-6">
-              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
-                <StepIcon className="w-10 h-10 text-gray-700" />
+              <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center mx-auto shadow-lg">
+                <StepIcon className="w-12 h-12 sm:w-16 sm:h-16 text-blue-700" />
               </div>
             </div>
+            
+            {/* Step-specific images/illustrations */}
+            {currentStep === 0 && (
+              <div className="mb-6 w-full max-w-md bg-gray-50 rounded-xl p-6 border-2 border-dashed border-gray-300">
+                <div className="text-center">
+                  <div className="inline-block bg-white rounded-lg p-4 shadow-sm mb-3">
+                    <Search className="w-8 h-8 text-gray-400 mx-auto" />
+                  </div>
+                  <p className="text-sm text-gray-600">Search bar at the top</p>
+                </div>
+              </div>
+            )}
+            
+            {currentStep === 1 && (
+              <div className="mb-6 w-full max-w-md bg-gray-50 rounded-xl p-6 border-2 border-dashed border-gray-300">
+                <div className="text-center">
+                  <div className="inline-flex items-center gap-2 bg-white rounded-lg p-4 shadow-sm mb-3">
+                    <BookOpen className="w-6 h-6 text-blue-600" />
+                    <span className="text-sm font-medium text-gray-700">Save to Notebook</span>
+                  </div>
+                  <p className="text-sm text-gray-600">Click the button to save</p>
+                </div>
+              </div>
+            )}
+            
+            {currentStep === 2 && (
+              <div className="mb-6 w-full max-w-md bg-gray-50 rounded-xl p-6 border-2 border-dashed border-gray-300">
+                <div className="text-center">
+                  <div className="inline-block bg-white rounded-lg p-4 shadow-sm mb-3 transform rotate-3">
+                    <GraduationCap className="w-8 h-8 text-purple-600 mx-auto" />
+                  </div>
+                  <p className="text-sm text-gray-600">Interactive flashcards</p>
+                </div>
+              </div>
+            )}
+            
+            {currentStep === 3 && (
+              <div className="mb-6 w-full max-w-md bg-gray-50 rounded-xl p-6 border-2 border-dashed border-gray-300">
+                <div className="text-center">
+                  <div className="inline-block bg-white rounded-lg p-4 shadow-sm mb-3">
+                    <ImageIcon className="w-8 h-8 text-green-600 mx-auto" />
+                  </div>
+                  <p className="text-sm text-gray-600">Generate images for each meaning</p>
+                </div>
+              </div>
+            )}
+            
+            {currentStep === 4 && (
+              <div className="mb-6 w-full max-w-md bg-gray-50 rounded-xl p-6 border-2 border-dashed border-gray-300">
+                <div className="text-center">
+                  <div className="inline-block bg-white rounded-lg p-4 shadow-sm mb-3">
+                    <Volume2 className="w-8 h-8 text-orange-600 mx-auto" />
+                  </div>
+                  <p className="text-sm text-gray-600">Click to hear pronunciation</p>
+                </div>
+              </div>
+            )}
+            
+            {currentStep === 5 && (
+              <div className="mb-6 w-full max-w-md bg-gray-50 rounded-xl p-6 border-2 border-dashed border-gray-300">
+                <div className="text-center">
+                  <div className="inline-flex items-center gap-2 bg-white rounded-lg p-4 shadow-sm mb-3">
+                    <Tag className="w-6 h-6 text-pink-600" />
+                    <span className="text-sm font-medium text-gray-700">Filter by tags</span>
+                  </div>
+                  <p className="text-sm text-gray-600">Organize and filter your words</p>
+                </div>
+              </div>
+            )}
+            
             <h2 className="text-2xl sm:text-3xl font-light text-gray-900 mb-4 text-center">
               {stepContent.title}
             </h2>

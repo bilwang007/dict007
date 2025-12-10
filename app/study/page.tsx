@@ -105,6 +105,49 @@ export default function StudyPage() {
     return () => window.removeEventListener('keydown', handleKeyPress)
   }, [currentIndex, flashcards.length])
 
+  // Swipe gestures for mobile (thumb movement)
+  useEffect(() => {
+    let touchStartX = 0
+    let touchEndX = 0
+    const minSwipeDistance = 50 // Minimum distance for swipe
+
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartX = e.changedTouches[0].screenX
+    }
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      touchEndX = e.changedTouches[0].screenX
+      const swipeDistance = touchEndX - touchStartX
+
+      // Don't trigger if user is interacting with a button or input
+      const target = e.target as HTMLElement
+      if (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.closest('button')) {
+        return
+      }
+
+      if (Math.abs(swipeDistance) > minSwipeDistance) {
+        if (swipeDistance > 0) {
+          // Swipe right - previous
+          handlePrevious()
+        } else {
+          // Swipe left - next
+          handleNext()
+        }
+      }
+    }
+
+    const flashcardElement = document.querySelector('[data-flashcard]')
+    if (flashcardElement) {
+      flashcardElement.addEventListener('touchstart', handleTouchStart, { passive: true })
+      flashcardElement.addEventListener('touchend', handleTouchEnd, { passive: true })
+      
+      return () => {
+        flashcardElement.removeEventListener('touchstart', handleTouchStart)
+        flashcardElement.removeEventListener('touchend', handleTouchEnd)
+      }
+    }
+  }, [currentIndex, flashcards.length])
+
   // Page turn animation variants
   const pageVariants = {
     enter: (direction: number) => ({
@@ -233,6 +276,8 @@ export default function StudyPage() {
                 card={currentCard}
                 targetLanguage={currentCard.targetLanguage}
                 onNext={handleNext}
+                onPrevious={handlePrevious}
+                showNavigation={true}
               />
             </motion.div>
           </AnimatePresence>

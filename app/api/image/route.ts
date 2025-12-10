@@ -13,9 +13,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate image with meaning context if provided (for better image matching specific meaning)
-    const prompt = `${word} - ${(definition || '').substring(0, 100)}`
-    const imageUrl = await generateImage(prompt, meaningContext)
+    // Generate image using meaning explanation instead of just the word
+    // If meaningContext is provided, use it as the primary prompt (it contains the specific meaning explanation)
+    // Otherwise fall back to definition
+    const prompt = meaningContext 
+      ? `${meaningContext.substring(0, 150)}` // Use meaning explanation directly
+      : definition 
+        ? `${definition.substring(0, 150)}` // Fall back to definition
+        : word // Last resort: just the word
+    
+    const imageUrl = await generateImage(prompt, meaningContext || definition)
 
     return NextResponse.json({ imageUrl })
   } catch (error) {

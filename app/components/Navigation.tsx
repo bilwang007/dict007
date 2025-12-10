@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { BookOpen, GraduationCap, Search, LogIn, LogOut, User, HelpCircle } from 'lucide-react'
+import { BookOpen, GraduationCap, Search, LogIn, LogOut, User, HelpCircle, FileQuestion } from 'lucide-react'
 import { createClient } from '@/app/lib/supabase/client'
 
 export default function Navigation() {
@@ -197,6 +197,7 @@ export default function Navigation() {
     { href: '/', label: 'Lookup', icon: Search },
     { href: '/notebook', label: 'Notebook', icon: BookOpen },
     { href: '/study', label: 'Study', icon: GraduationCap },
+    { href: '/quiz', label: 'Quiz', icon: FileQuestion },
   ]
 
   const handleLookupClick = (e: React.MouseEvent) => {

@@ -6,6 +6,7 @@ import Navigation from './components/Navigation'
 import LookupForm from './components/LookupForm'
 import ResultCard from './components/ResultCard'
 import { DefinitionLoadingCard } from './components/TypingAnimation'
+import LearningAnalysis from './components/LearningAnalysis'
 import { saveNotebookEntry, isNotebookEntrySaved } from './lib/storage-supabase'
 import { LANGUAGES, type LookupResult, type LanguageCode } from './lib/types'
 
@@ -88,6 +89,13 @@ export default function Home() {
           setIsSaved(false)
           setSaveStatus('idle')
         })
+      // Scroll to definition result when it appears
+      setTimeout(() => {
+        const element = document.getElementById('definition-result')
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 100)
     } else {
       setIsSaved(false)
       setSaveStatus('idle')
@@ -129,8 +137,8 @@ export default function Home() {
           const remainingTime = Math.max(0, MIN_LOADING_DURATION - elapsed)
           
           setTimeout(() => {
-            setResult(cachedData.data)
-            setIsLoading(false)
+          setResult(cachedData.data)
+          setIsLoading(false)
             setLoadingResult(null)
             setMinLoadingTime(false)
           }, remainingTime)
@@ -170,19 +178,55 @@ export default function Home() {
         return [word, ...filtered].slice(0, 3) // Add to front, keep max 3
       })
       
-      // Update loading result with actual data for typing animation
-      setLoadingResult(data)
-      
-      // Ensure minimum loading time for consistent animation (like LLM generation)
-      const elapsed = Date.now() - startTime
-      const remainingTime = Math.max(0, MIN_LOADING_DURATION - elapsed)
-      
-      setTimeout(() => {
-        setResult(data)
-        setIsLoading(false)
-        setLoadingResult(null)
-        setMinLoadingTime(false)
-      }, remainingTime)
+      // Step-by-step display: Show definition first, then examples, then usage note
+      // This makes lookup feel faster even if total time is the same
+      if (data.definitionTarget || data.definition) {
+        // Show definition immediately
+        setLoadingResult({
+          word: data.word,
+          definitionTarget: data.definitionTarget || '',
+          definition: data.definition || '',
+          examples: [],
+          usageNote: '',
+          source: data.source,
+        })
+        
+        // Show examples after 400ms
+        setTimeout(() => {
+          setLoadingResult(prev => prev ? {
+            ...prev,
+            examples: data.examples || [],
+          } : null)
+        }, 400)
+        
+        // Show usage note after 800ms
+        setTimeout(() => {
+          setLoadingResult(prev => prev ? {
+            ...prev,
+            usageNote: data.usageNote || '',
+          } : null)
+          
+          // Final result after all parts shown
+          setTimeout(() => {
+            setResult(data)
+            setIsLoading(false)
+            setLoadingResult(null)
+            setMinLoadingTime(false)
+          }, 400)
+        }, 800)
+      } else {
+        // Fallback: show all at once if no definition
+        setLoadingResult(data)
+        const elapsed = Date.now() - startTime
+        const remainingTime = Math.max(0, MIN_LOADING_DURATION - elapsed)
+        
+        setTimeout(() => {
+          setResult(data)
+          setIsLoading(false)
+          setLoadingResult(null)
+          setMinLoadingTime(false)
+        }, remainingTime)
+      }
       
       // Cache the result
       if (typeof window !== 'undefined') {
@@ -274,31 +318,31 @@ export default function Home() {
         }
       } else {
         // Single meaning - save as before
-        const savedEntry = saveNotebookEntry({
-          word: result.word,
-          phonetic: result.phonetic || undefined,
-          targetLanguage,
-          nativeLanguage,
-          definition: result.definition,
-          definitionTarget: result.definitionTarget || '',
-          imageUrl: result.imageUrl || undefined,
-          audioUrl: undefined, // Audio generated on-demand
-          exampleSentence1: result.examples[0]?.sentence || '',
-          exampleSentence2: result.examples[1]?.sentence || '',
-          exampleTranslation1: result.examples[0]?.translation || '',
-          exampleTranslation2: result.examples[1]?.translation || '',
-          usageNote: result.usageNote,
-        } as any, true) // Always replace if exists
-        
-        console.log('Entry saved:', savedEntry)
-        
-        // Trigger custom event so notebook page can refresh if open
-        window.dispatchEvent(new CustomEvent('notebookUpdated'))
-        
-        setSaveStatus('saved')
-        setIsSaved(true)
-        // Auto-hide notification after 3 seconds
-        setTimeout(() => setSaveStatus('idle'), 3000)
+      const savedEntry = saveNotebookEntry({
+        word: result.word,
+        phonetic: result.phonetic || undefined,
+        targetLanguage,
+        nativeLanguage,
+        definition: result.definition,
+        definitionTarget: result.definitionTarget || '',
+        imageUrl: result.imageUrl || undefined,
+        audioUrl: undefined, // Audio generated on-demand
+        exampleSentence1: result.examples[0]?.sentence || '',
+        exampleSentence2: result.examples[1]?.sentence || '',
+        exampleTranslation1: result.examples[0]?.translation || '',
+        exampleTranslation2: result.examples[1]?.translation || '',
+        usageNote: result.usageNote,
+      } as any, true) // Always replace if exists
+      
+      console.log('Entry saved:', savedEntry)
+      
+      // Trigger custom event so notebook page can refresh if open
+      window.dispatchEvent(new CustomEvent('notebookUpdated'))
+      
+      setSaveStatus('saved')
+      setIsSaved(true)
+      // Auto-hide notification after 3 seconds
+      setTimeout(() => setSaveStatus('idle'), 3000)
       }
     } catch (err) {
       console.error('Error saving to notebook:', err)
@@ -377,7 +421,7 @@ export default function Home() {
 
         {/* Results - Show immediately after navigation when available */}
         {result && !isLoading && (
-          <div className="mt-4 sm:mt-6 animate-fade-in flex-shrink-0">
+          <div id="definition-result" className="mt-4 sm:mt-6 animate-fade-in flex-shrink-0">
             {/* Save Status Notification */}
             {saveStatus === 'saved' && result?.source !== 'database' && (
               <div className="mb-4 bg-gray-50 border border-gray-200 text-gray-700 p-3 sm:p-4 rounded-xl animate-fade-in">
@@ -477,6 +521,13 @@ export default function Home() {
                   </div>
                 )}
               </div>
+              
+              {/* Learning Analysis - Below lookup form (only when no result and not loading) */}
+              {!result && !isLoading && (
+                <div className="w-full max-w-4xl mx-auto mt-8">
+                  <LearningAnalysis />
+                </div>
+              )}
             </>
           )}
         </div>

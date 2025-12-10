@@ -8,6 +8,24 @@
 
 ## 1. Product Overview / 产品概述
 
+### UI/UX Guidelines / UI/UX 指南
+
+#### Notification System / 通知系统
+- **No Popup Notifications:** The application does NOT use popup notifications (toasts, alerts, or modal dialogs) for user feedback.
+- **Inline Messages:** All user feedback is displayed as inline messages within the relevant component or page section.
+- **Message Display:** Messages appear directly in the UI context where the action occurred, using color-coded inline banners (success: green, error: red, info: blue).
+- **Auto-dismiss:** Inline messages automatically disappear after 3-5 seconds, or remain visible until the user dismisses them or navigates away.
+- **Rationale:** This approach provides better UX by keeping feedback contextual, non-intrusive, and accessible without blocking user interaction.
+
+#### 通知系统
+- **无弹窗通知:** 应用程序不使用弹窗通知（toast、alert 或模态对话框）来提供用户反馈。
+- **内联消息:** 所有用户反馈都显示为相关组件或页面部分内的内联消息。
+- **消息显示:** 消息直接显示在操作发生的 UI 上下文中，使用颜色编码的内联横幅（成功：绿色，错误：红色，信息：蓝色）。
+- **自动消失:** 内联消息在 3-5 秒后自动消失，或保持可见直到用户关闭或离开。
+- **理由:** 这种方法通过保持反馈的上下文性、非侵入性和可访问性，在不阻塞用户交互的情况下提供更好的用户体验。
+
+## 1. Product Overview / 产品概述
+
 ### English
 **Product Name:** AI Dictionary  
 **Version:** 2.0  

@@ -85,7 +85,7 @@ export default function ResultCard({
   useEffect(() => {
     setCurrentResult(result)
   }, [result])
-
+  
   // Load user comment when result changes
   useEffect(() => {
     if (result?.wordDefinitionId) {
@@ -154,7 +154,7 @@ export default function ResultCard({
       }
     } catch (error) {
       console.error('Failed to generate image:', error)
-      alert('Failed to generate image. Please try again.')
+      console.error('Failed to generate image:', error)
     } finally {
       setIsGeneratingImage(false)
       setGeneratingImageIndex(null)
@@ -201,7 +201,7 @@ export default function ResultCard({
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        alert('Please log in to save comments')
+        console.log('Please log in to save comments')
         return
       }
       
@@ -278,7 +278,7 @@ export default function ResultCard({
       setShowCommentModal(false)
     } catch (error) {
       console.error('Error saving comment:', error)
-      alert('Failed to save comment. Please try again.')
+      console.error('Failed to save comment:', error)
     } finally {
       setIsSavingComment(false)
     }
@@ -325,7 +325,7 @@ export default function ResultCard({
       window.dispatchEvent(new CustomEvent('definitionRegenerated', { detail: newResult }))
     } catch (error) {
       console.error('Error regenerating definition:', error)
-      alert('Failed to regenerate definition. Please try again.')
+      console.error('Failed to regenerate definition:', error)
     } finally {
       setIsRegenerating(false)
     }
@@ -462,15 +462,15 @@ export default function ResultCard({
           {/* Main Image - Only for single meaning */}
           {currentResult.imageUrl && !imageError && (
             <div className="mb-4 sm:mb-6 rounded-lg sm:rounded-xl overflow-hidden bg-gray-100 relative group">
-              <Image
+          <Image
                 src={currentResult.imageUrl}
                 alt={`Visualization of ${currentResult.word}`}
-                width={800}
-                height={400}
-                className="w-full h-auto"
-                unoptimized
-                onError={() => setImageError(true)}
-              />
+            width={800}
+            height={400}
+            className="w-full h-auto"
+            unoptimized
+            onError={() => setImageError(true)}
+          />
               <button
                 onClick={() => handleGenerateImage()}
                 disabled={isGeneratingImage}
@@ -483,7 +483,7 @@ export default function ResultCard({
                   <ImageIcon className="w-4 h-4 text-gray-700" />
                 )}
               </button>
-            </div>
+        </div>
           )}
         </>
       )}
@@ -565,19 +565,19 @@ export default function ResultCard({
           <>
             {/* Single meaning - show as before */}
             {currentResult.definitionTarget && currentResult.definitionTarget.trim() ? (
-              <div className="mb-3">
+          <div className="mb-3">
                 <FormattedDefinition text={currentResult.definitionTarget} />
-              </div>
-            ) : (
-              <div className="mb-3">
-                <p className="text-lg sm:text-xl text-gray-500 italic">Definition in {targetLanguage} not available</p>
-              </div>
-            )}
-            {/* Native Language Definition/Translation */}
+          </div>
+        ) : (
+          <div className="mb-3">
+            <p className="text-lg sm:text-xl text-gray-500 italic">Definition in {targetLanguage} not available</p>
+          </div>
+        )}
+        {/* Native Language Definition/Translation */}
             {currentResult.definition && currentResult.definition.trim() && (
-              <div className="mt-2">
+          <div className="mt-2">
                 <FormattedDefinition text={currentResult.definition} className="text-base sm:text-lg text-gray-700" />
-              </div>
+          </div>
             )}
           </>
         )}
@@ -585,21 +585,21 @@ export default function ResultCard({
 
       {/* Example Sentences - Only show if not showing per-meaning examples */}
       {(!currentResult.meanings || currentResult.meanings.length <= 1) && (
-        <div className="mb-4 sm:mb-6 space-y-3 sm:space-y-4">
-          <h2 className="text-lg sm:text-xl font-light text-gray-900 mb-2 sm:mb-3">Examples</h2>
+      <div className="mb-4 sm:mb-6 space-y-3 sm:space-y-4">
+        <h2 className="text-lg sm:text-xl font-light text-gray-900 mb-2 sm:mb-3">Examples</h2>
           {currentResult.examples.map((example, index) => (
-            <div
-              key={index}
-              className="bg-gray-50 border border-gray-200 p-3 sm:p-4 rounded-xl"
-            >
-              <div className="flex items-start gap-2 sm:gap-3 mb-1.5 sm:mb-2">
-                <p className="text-base sm:text-lg text-gray-900 flex-1 font-light">{example.sentence}</p>
-                <AudioPlayer text={example.sentence} language={targetLanguage} size="md" />
-              </div>
-              <p className="text-sm sm:text-base text-gray-600 italic ml-0 sm:ml-4">{example.translation}</p>
+          <div
+            key={index}
+            className="bg-gray-50 border border-gray-200 p-3 sm:p-4 rounded-xl"
+          >
+            <div className="flex items-start gap-2 sm:gap-3 mb-1.5 sm:mb-2">
+              <p className="text-base sm:text-lg text-gray-900 flex-1 font-light">{example.sentence}</p>
+              <AudioPlayer text={example.sentence} language={targetLanguage} size="md" />
             </div>
-          ))}
-        </div>
+            <p className="text-sm sm:text-base text-gray-600 italic ml-0 sm:ml-4">{example.translation}</p>
+          </div>
+        ))}
+      </div>
       )}
 
       {/* Usage Note */}

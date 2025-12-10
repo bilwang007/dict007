@@ -17,6 +17,7 @@ interface NotebookItemProps {
 
 export default function NotebookItem({ entry, onDelete, isDeleting = false }: NotebookItemProps) {
   const [imageError, setImageError] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
   const [tags, setTags] = useState<string[]>(entry.tags || [])
   const [newTag, setNewTag] = useState('')
   const [showTagInput, setShowTagInput] = useState(false)
@@ -28,6 +29,12 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
   const [currentEntry, setCurrentEntry] = useState<NotebookEntry>(entry)
   const [displayedComment, setDisplayedComment] = useState<string>('')
   const [isGeneratingImage, setIsGeneratingImage] = useState(false)
+  
+  // Sync tags when entry changes
+  useEffect(() => {
+    setTags(entry.tags || [])
+    setCurrentEntry(entry)
+  }, [entry.tags, entry.id])
   
   // Load user comment when entry changes
   useEffect(() => {
@@ -105,7 +112,8 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        alert('Please log in to save comments')
+        setMessage('Please log in to save comments')
+        setTimeout(() => setMessage(null), 3000)
         return
       }
       
@@ -199,7 +207,8 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
       window.dispatchEvent(new CustomEvent('notebookUpdated'))
     } catch (error) {
       console.error('Error saving comment:', error)
-      alert('Failed to save comment. Please try again.')
+      setMessage('Failed to save comment. Please try again.')
+      setTimeout(() => setMessage(null), 3000)
     } finally {
       setIsSavingComment(false)
     }
@@ -211,13 +220,26 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
       try {
         const success = await addTagToEntry(entry.id, tag)
         if (success) {
-          setTags([...tags, tag])
+          // Update local state
+          const updatedTags = [...tags, tag]
+          setTags(updatedTags)
+          // Update entry
+          setCurrentEntry({ ...currentEntry, tags: updatedTags })
           setNewTag('')
           setShowTagInput(false)
+          // Save to recent tags
+          const recent = JSON.parse(localStorage.getItem('recentTags') || '[]')
+          if (!recent.includes(tag)) {
+            recent.unshift(tag)
+            if (recent.length > 10) recent.pop()
+            localStorage.setItem('recentTags', JSON.stringify(recent))
+          }
           window.dispatchEvent(new CustomEvent('notebookUpdated'))
         }
       } catch (error) {
         console.error('Error adding tag:', error)
+        setMessage('Failed to add tag. Please try again.')
+        setTimeout(() => setMessage(null), 3000)
       }
     }
   }
@@ -226,11 +248,17 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
     try {
       const success = await removeTagFromEntry(entry.id, tag)
       if (success) {
-        setTags(tags.filter(t => t !== tag))
+        // Update local state
+        const updatedTags = tags.filter(t => t !== tag)
+        setTags(updatedTags)
+        // Update entry
+        setCurrentEntry({ ...currentEntry, tags: updatedTags })
         window.dispatchEvent(new CustomEvent('notebookUpdated'))
       }
     } catch (error) {
       console.error('Error removing tag:', error)
+      setMessage('Failed to remove tag. Please try again.')
+      setTimeout(() => setMessage(null), 3000)
     }
   }
   
@@ -270,7 +298,8 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
       }
     } catch (error) {
       console.error('Failed to generate image:', error)
-      alert('Failed to generate image. Please try again.')
+      setMessage('Failed to generate image. Please try again.')
+      setTimeout(() => setMessage(null), 3000)
     } finally {
       setIsGeneratingImage(false)
     }
@@ -284,6 +313,11 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
       transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
       className="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all overflow-hidden"
     >
+      {message && (
+        <div className="px-4 py-2 bg-red-50 border-b border-red-200 text-red-700 text-sm">
+          {message}
+        </div>
+      )}
       {/* Compact Header - Always Visible */}
       <div className="p-4 sm:p-5 flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
@@ -317,6 +351,13 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => setShowTagInput(!showTagInput)}
+            className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Add tag"
+          >
+            <Tag className="w-5 h-5" />
+          </button>
           <button
             onClick={() => setShowCommentModal(true)}
             className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"

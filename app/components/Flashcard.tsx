@@ -3,23 +3,77 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
-import { Maximize2, Minimize2 } from 'lucide-react'
+import { Maximize2, Minimize2, Tag, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import AudioPlayer from './AudioPlayer'
+import { addTagToEntry, removeTagFromEntry, getNotebookEntries } from '@/app/lib/storage-supabase'
 import type { Flashcard } from '@/app/lib/types'
 
 interface FlashcardProps {
   card: Flashcard
   targetLanguage: string
   onNext?: () => void
+  onPrevious?: () => void
+  showNavigation?: boolean
 }
 
-export default function Flashcard({ card, targetLanguage, onNext }: FlashcardProps) {
+export default function Flashcard({ card, targetLanguage, onNext, onPrevious, showNavigation = false }: FlashcardProps) {
   const [isFlipped, setIsFlipped] = useState(false)
   const [imageError, setImageError] = useState(false)
   const [showTranslation, setShowTranslation] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [fontScale, setFontScale] = useState(1)
+  const [tags, setTags] = useState<string[]>([])
+  const [newTag, setNewTag] = useState('')
+  const [showTagInput, setShowTagInput] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
+
+  // Load tags for this card (only if card has tags property)
+  useEffect(() => {
+    const loadTags = async () => {
+      try {
+        // Only load if we have a valid card ID
+        if (!card.id) return
+        
+        const entries = await getNotebookEntries()
+        const entry = entries.find(e => e.id === card.id)
+        if (entry?.tags && Array.isArray(entry.tags)) {
+          setTags(entry.tags)
+        } else {
+          setTags([])
+        }
+      } catch (error) {
+        console.error('Error loading tags:', error)
+        setTags([]) // Set empty array on error
+      }
+    }
+    loadTags()
+  }, [card.id])
+
+  const handleAddTag = async () => {
+    if (newTag.trim() && !tags.includes(newTag.trim())) {
+      try {
+        const success = await addTagToEntry(card.id, newTag.trim())
+        if (success) {
+          setTags([...tags, newTag.trim()])
+          setNewTag('')
+          setShowTagInput(false)
+        }
+      } catch (error) {
+        console.error('Error adding tag:', error)
+      }
+    }
+  }
+
+  const handleRemoveTag = async (tag: string) => {
+    try {
+      const success = await removeTagFromEntry(card.id, tag)
+      if (success) {
+        setTags(tags.filter(t => t !== tag))
+      }
+    } catch (error) {
+      console.error('Error removing tag:', error)
+    }
+  }
 
   // Calculate font scale based on content height and available space
   useEffect(() => {
@@ -141,6 +195,32 @@ export default function Flashcard({ card, targetLanguage, onNext }: FlashcardPro
                 </div>
                 <p className={`text-gray-500 font-medium ${isFullscreen ? 'text-lg' : 'text-sm'}`}>Tap to flip</p>
               </div>
+              
+              {/* Navigation Buttons on Front (if enabled) */}
+              {showNavigation && (
+                <div className="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-3">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onPrevious?.()
+                    }}
+                    className="p-2 bg-white/90 backdrop-blur-sm border border-gray-300 rounded-lg hover:bg-white transition-colors shadow-sm"
+                    title="Previous card"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-gray-700" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onNext?.()
+                    }}
+                    className="p-2 bg-white/90 backdrop-blur-sm border border-gray-300 rounded-lg hover:bg-white transition-colors shadow-sm"
+                    title="Next card"
+                  >
+                    <ChevronRight className="w-5 h-5 text-gray-700" />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Back of card - Apple style */}
@@ -165,20 +245,85 @@ export default function Flashcard({ card, targetLanguage, onNext }: FlashcardPro
                     </span>
                   )}
                 </div>
-                <div 
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                  }}
-                  onMouseDown={(e) => {
-                    e.stopPropagation()
-                    e.preventDefault()
-                  }}
-                  className="flex-shrink-0"
-                >
-                  <AudioPlayer text={card.word} language={targetLanguage} size={isFullscreen ? "md" : "sm"} />
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowTagInput(!showTagInput)
+                    }}
+                    className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Add tag"
+                  >
+                    <Tag className="w-4 h-4" />
+                  </button>
+                  <div 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                    }}
+                  >
+                    <AudioPlayer text={card.word} language={targetLanguage} size={isFullscreen ? "md" : "sm"} />
+                  </div>
                 </div>
               </div>
+              
+              {/* Tags on back of card */}
+              {(tags.length > 0 || showTagInput) && (
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {tags.map(tag => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium"
+                      >
+                        <Tag className="w-3 h-3" />
+                        {tag}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemoveTag(tag)
+                          }}
+                          className="text-blue-400 hover:text-blue-600 transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                    {showTagInput && (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={newTag}
+                          onChange={(e) => setNewTag(e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              e.stopPropagation()
+                              handleAddTag()
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          placeholder="Tag name"
+                          className="px-2 py-1 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-gray-400 focus:border-transparent outline-none"
+                          autoFocus
+                        />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleAddTag()
+                          }}
+                          className="px-2 py-1 text-xs bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="flex-1 flex flex-col justify-center space-y-4 sm:space-y-6 overflow-hidden">
                 {/* Definition in target language */}

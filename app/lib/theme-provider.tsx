@@ -17,7 +17,7 @@ export function ThemeProvider({ children, initialTheme }: { children: React.Reac
   const [effectiveTheme, setEffectiveTheme] = useState<'light' | 'dark'>('light')
 
   useEffect(() => {
-    // Load theme from localStorage or profile
+    // Load theme from localStorage only (no async fetch to avoid blocking)
     const savedTheme = localStorage.getItem('theme') as Theme
     if (savedTheme && ['light', 'dark', 'auto'].includes(savedTheme)) {
       setThemeState(savedTheme)

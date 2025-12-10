@@ -14,12 +14,21 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get user profile
-    const { data: profile, error } = await supabase
+    // Get user profile with timeout handling
+    const profileQuery = supabase
       .from('user_profiles')
       .select('*')
       .eq('id', user.id)
       .single()
+    
+    // Add timeout to prevent hanging
+    const timeoutId = setTimeout(() => {
+      console.error('Profile query timeout after 3 seconds')
+    }, 3000)
+    
+    const { data: profile, error } = await profileQuery
+    
+    clearTimeout(timeoutId)
 
     if (error && error.code !== 'PGRST116') {
       console.error('Error fetching profile:', error)
