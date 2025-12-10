@@ -125,3 +125,5 @@ Deploy to Vercel, Netlify, or any static hosting:
 ## License
 
 MIT
+
+<!-- Deployment trigger -->
