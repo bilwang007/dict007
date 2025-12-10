@@ -7,9 +7,19 @@ export async function updateSession(request: NextRequest) {
     request,
   })
 
+  // Check if Supabase environment variables are set
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  // If Supabase is not configured, allow all requests through (for development)
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn('⚠️ Middleware: Supabase environment variables not set. Skipping authentication.')
+    return supabaseResponse
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
@@ -29,19 +39,28 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Try getSession() first (designed for middleware)
-  let {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession()
+  let session = null
+  let sessionError = null
+  let user = null
 
-  // If getSession fails but we have auth cookies, try getUser() as fallback
-  let user = session?.user ?? null
-  if (!user && !sessionError) {
-    const userResult = await supabase.auth.getUser()
-    user = userResult.data.user
-    if (userResult.error && !sessionError) {
-      sessionError = userResult.error
+  try {
+    const sessionResult = await supabase.auth.getSession()
+    session = sessionResult.data.session
+    sessionError = sessionResult.error
+
+    // If getSession fails but we have auth cookies, try getUser() as fallback
+    user = session?.user ?? null
+    if (!user && !sessionError) {
+      const userResult = await supabase.auth.getUser()
+      user = userResult.data.user
+      if (userResult.error && !sessionError) {
+        sessionError = userResult.error
+      }
     }
+  } catch (error: any) {
+    console.error('❌ Middleware: Error in authentication:', error.message)
+    // Continue without blocking - let routes handle authentication
+    sessionError = error
   }
 
   // Log for debugging
