@@ -95,6 +95,7 @@ export default function Flashcard({ card, targetLanguage, onNext }: FlashcardPro
           </button>
 
           <motion.div
+            data-flashcard
             className="relative w-full h-full cursor-pointer"
             onClick={flipCard}
             animate={{ rotateY: isFlipped ? 180 : 0 }}

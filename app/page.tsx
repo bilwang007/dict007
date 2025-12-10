@@ -504,11 +504,17 @@ export default function Home() {
           </div>
         )}
         
-        {/* Fallback Loading State (when result not yet available) */}
+        {/* Fallback Loading State (when result not yet available) - Smooth like LLM chat */}
         {isLoading && !loadingResult && (
-          <div className="text-center py-8 sm:py-12">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-2 border-gray-300 border-t-gray-900"></div>
-            <p className="mt-3 sm:mt-4 text-sm sm:text-base text-gray-600 font-medium">Looking up word...</p>
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-6 sm:p-8 max-w-4xl mx-auto animate-fade-in">
+            <div className="flex items-center gap-3">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+              </div>
+              <p className="text-sm sm:text-base text-gray-600 font-medium">Looking up word...</p>
+            </div>
           </div>
         )}
 

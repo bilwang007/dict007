@@ -35,12 +35,33 @@ body {
 /* Force gray border on select elements - override browser defaults */
 select {
   border-color: rgb(209 213 219) !important;
+  color: rgb(17 24 39) !important; /* Force dark text */
+  background-color: white !important; /* Force white background */
 }
 
 select:focus {
   border-color: rgb(17 24 39) !important;
   outline: none !important;
   box-shadow: none !important;
+  color: rgb(17 24 39) !important; /* Ensure text stays dark on focus */
+}
+
+/* Force option text color */
+select option {
+  color: rgb(17 24 39) !important;
+  background-color: white !important;
+}
+
+/* Override dark mode for select elements */
+@media (prefers-color-scheme: dark) {
+  select {
+    color: rgb(17 24 39) !important;
+    background-color: white !important;
+  }
+  select option {
+    color: rgb(17 24 39) !important;
+    background-color: white !important;
+  }
 }
 
 /* Custom scrollbar */

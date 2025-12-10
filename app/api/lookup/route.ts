@@ -239,33 +239,30 @@ export async function POST(request: NextRequest) {
 
     // Step 2: If not found in database/notebook (or forceAI is true), fetch from Wikipedia first, then use LLM
     if (!definitionResult) {
-      // Try to fetch from Wikipedia first for fast initial response
-      const wikiResult = await fetchWikipediaDefinition(sanitizedWord, targetLanguage)
+      // Optimize: Start Wikipedia and LLM calls in parallel for faster response
+      const wikiPromise = fetchWikipediaDefinition(sanitizedWord, targetLanguage)
+      const llmPromise = generateDefinition(sanitizedWord, targetLanguage, nativeLanguage)
+      
+      // Wait for Wikipedia first (usually faster), but don't wait too long
+      const wikiResult = await Promise.race([
+        wikiPromise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)) // 2 second timeout
+      ])
       
       if (wikiResult) {
-        // Return Wikipedia definition immediately, then generate examples with LLM
-        // For now, we'll return Wikipedia definition and generate examples
-        // In a streaming version, we'd return Wikipedia first, then stream LLM examples
         source = 'wikipedia'
-        
-        // Generate examples and usage notes with LLM (this can be done asynchronously)
-        // For better UX, we return Wikipedia definition first, then update with LLM examples
-        const llmResult = await generateDefinition(
-          sanitizedWord, 
-          targetLanguage, 
-          nativeLanguage,
-          wikiResult.definition
-        )
+        // Use Wikipedia definition, but get examples from LLM (already in progress)
+        const llmResult = await llmPromise
         definitionResult = {
           ...llmResult,
           definitionTarget: llmResult.definitionTarget || wikiResult.definition,
-          definition: llmResult.definition || '',
+          definition: llmResult.definition || wikiResult.definition || '',
         } as DefinitionResult
       } else {
-        source = 'llm'
-        const llmResult = await generateDefinition(sanitizedWord, targetLanguage, nativeLanguage)
-        // Cast to DefinitionResult since generateDefinition returns compatible structure
-        definitionResult = llmResult as DefinitionResult
+        // Wikipedia failed or timed out, use LLM result
+      source = 'llm'
+        const llmResult = await llmPromise
+      definitionResult = llmResult as DefinitionResult
       }
       
       // NOTE: We do NOT automatically save to the shared dictionary (word_definitions).

@@ -72,6 +72,39 @@ export default function StudyPage() {
     setCurrentIndex(0)
   }
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input
+      if ((e.target as HTMLElement)?.tagName === 'INPUT' || 
+          (e.target as HTMLElement)?.tagName === 'TEXTAREA') {
+        return
+      }
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault()
+          handlePrevious()
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          handleNext()
+          break
+        case ' ': // Spacebar
+          e.preventDefault()
+          // Flip card - trigger click on flashcard
+          const flashcardElement = document.querySelector('[data-flashcard]')
+          if (flashcardElement) {
+            (flashcardElement as HTMLElement).click()
+          }
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [currentIndex, flashcards.length])
+
   // Page turn animation variants
   const pageVariants = {
     enter: (direction: number) => ({
@@ -184,7 +217,7 @@ export default function StudyPage() {
         </div>
 
         {/* Flashcard with Page Turn Animation */}
-        <div className="mb-8 relative" style={{ minHeight: '600px' }}>
+        <div className="mb-4 relative" style={{ minHeight: '600px' }}>
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div
               key={currentIndex}
@@ -205,24 +238,35 @@ export default function StudyPage() {
           </AnimatePresence>
         </div>
 
-        {/* Navigation Buttons */}
-        <div className="flex items-center justify-center gap-4">
+        {/* Navigation Buttons - Closer to card */}
+        <div className="flex items-center justify-center gap-3 mb-4">
           <button
             onClick={handlePrevious}
             disabled={flashcards.length === 0}
-            className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+            title="Previous card (← Arrow Left)"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-4 h-4" />
             Previous
           </button>
           <button
             onClick={handleNext}
             disabled={flashcards.length === 0}
-            className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+            title="Next card (→ Arrow Right)"
           >
             Next
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-4 h-4" />
           </button>
+        </div>
+        
+        {/* Keyboard Shortcuts Hint */}
+        <div className="text-center mb-4">
+          <p className="text-xs text-gray-500">
+            Press <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs">Space</kbd> to flip • 
+            <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs ml-1">←</kbd> Previous • 
+            <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs ml-1">→</kbd> Next
+          </p>
         </div>
       </div>
     </main>

@@ -33,9 +33,39 @@ export default function NotebookPage() {
   const [showBatchTag, setShowBatchTag] = useState(false)
   const [newTag, setNewTag] = useState('')
   const [availableTags, setAvailableTags] = useState<string[]>([])
+  const [selectedTag, setSelectedTag] = useState<string | null>(null)
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string | null>(null)
   const [targetLanguage, setTargetLanguage] = useState<LanguageCode>('en')
   const [nativeLanguage, setNativeLanguage] = useState<LanguageCode>('zh')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Filter entries based on selected tag or date
+  const filteredEntries = entries.filter(entry => {
+    // Tag filter
+    if (selectedTag && selectedTag !== 'all') {
+      // System tags
+      if (selectedTag === 'last-3-days') {
+        const threeDaysAgo = new Date()
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+        const entryDate = new Date(entry.createdAt)
+        return entryDate >= threeDaysAgo
+      } else if (selectedTag === 'last-7-days') {
+        const sevenDaysAgo = new Date()
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+        const entryDate = new Date(entry.createdAt)
+        return entryDate >= sevenDaysAgo
+      } else if (selectedTag === 'last-30-days') {
+        const thirtyDaysAgo = new Date()
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+        const entryDate = new Date(entry.createdAt)
+        return entryDate >= thirtyDaysAgo
+      } else {
+        // Regular tag filter
+        return entry.tags && entry.tags.includes(selectedTag)
+      }
+    }
+    return true
+  })
 
   const fetchEntries = async () => {
     setIsLoading(true)
@@ -194,12 +224,12 @@ export default function NotebookPage() {
   }
 
   const handleSelectAll = () => {
-    if (selectedIds.size === entries.length) {
+    if (selectedIds.size === filteredEntries.length) {
       // Deselect all
       setSelectedIds(new Set())
     } else {
-      // Select all
-      setSelectedIds(new Set(entries.map(e => e.id)))
+      // Select all filtered entries
+      setSelectedIds(new Set(filteredEntries.map(e => e.id)))
     }
   }
 
@@ -326,7 +356,7 @@ export default function NotebookPage() {
 
     setIsGeneratingStory(true)
     try {
-      const selectedEntries = entries.filter(e => selectedIds.has(e.id))
+      const selectedEntries = filteredEntries.filter(e => selectedIds.has(e.id))
       
       if (selectedEntries.length === 0) {
         throw new Error('No entries selected')
@@ -389,10 +419,97 @@ export default function NotebookPage() {
                 <Navigation />
 
                 {/* Header */}
-                <div className="mb-12">
+                <div className="mb-8">
                   <h1 className="text-5xl font-light text-gray-900 tracking-tight mb-2">My Notebook</h1>
                   <p className="text-gray-500 text-lg">Your saved words and definitions</p>
                 </div>
+
+                {/* Tag Filter - At the top */}
+                {!isLoading && !error && entries.length > 0 && (
+                  <div className="mb-8 bg-white border border-gray-200 rounded-xl p-4">
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <span className="text-sm font-medium text-gray-700 mr-2">Filter by:</span>
+                      <button
+                        onClick={() => {
+                          setSelectedTag(null)
+                          setSelectedDateFilter(null)
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          !selectedTag && !selectedDateFilter
+                            ? 'bg-gray-900 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        All
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedTag('last-3-days')
+                          setSelectedDateFilter('last-3-days')
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          selectedTag === 'last-3-days'
+                            ? 'bg-gray-900 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        Last 3 Days
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedTag('last-7-days')
+                          setSelectedDateFilter('last-7-days')
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          selectedTag === 'last-7-days'
+                            ? 'bg-gray-900 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        Last 7 Days
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedTag('last-30-days')
+                          setSelectedDateFilter('last-30-days')
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                          selectedTag === 'last-30-days'
+                            ? 'bg-gray-900 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        Last 30 Days
+                      </button>
+                    </div>
+                    {availableTags.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium text-gray-700 mr-2">Tags:</span>
+                        {availableTags.map(tag => (
+                          <button
+                            key={tag}
+                            onClick={() => {
+                              setSelectedTag(tag)
+                              setSelectedDateFilter(null)
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                              selectedTag === tag && !selectedDateFilter
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
+                            }`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {selectedTag && (
+                      <div className="mt-3 text-sm text-gray-600">
+                        Showing {filteredEntries.length} of {entries.length} entries
+                      </div>
+                    )}
+                  </div>
+                )}
 
         {/* Error State */}
         {error && (
@@ -409,7 +526,7 @@ export default function NotebookPage() {
         )}
 
         {/* Story Generation */}
-        {entries.length > 0 && (
+        {filteredEntries.length > 0 && (
           <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
@@ -425,7 +542,7 @@ export default function NotebookPage() {
                   onClick={handleSelectAll}
                   className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
                 >
-                  {selectedIds.size === entries.length ? 'Deselect All' : 'Select All'}
+                  {selectedIds.size === filteredEntries.length ? 'Deselect All' : 'Select All'}
                 </button>
                 <button
                   onClick={handleGenerateStory}
@@ -441,9 +558,9 @@ export default function NotebookPage() {
         )}
 
         {/* Generated Story */}
-        {story && entries.length > 0 && (
+        {story && filteredEntries.length > 0 && (
           <div className="mb-8">
-            <StoryView story={story} targetLanguage={entries[0]?.targetLanguage || 'en'} />
+            <StoryView story={story} targetLanguage={filteredEntries[0]?.targetLanguage || 'en'} />
           </div>
         )}
 
@@ -472,7 +589,7 @@ export default function NotebookPage() {
         {/* Entries List */}
         {!isLoading && !error && entries.length > 0 && (
           <div className="space-y-3">
-            {entries.map(entry => (
+            {filteredEntries.map(entry => (
               <div key={entry.id} className="relative flex items-start gap-3">
                 <input
                   type="checkbox"
@@ -505,7 +622,7 @@ export default function NotebookPage() {
             </button>
 
             {/* Batch Tagging Button */}
-            {entries.length > 0 && (
+            {filteredEntries.length > 0 && (
               <button
                 onClick={() => setShowBatchTag(!showBatchTag)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
@@ -532,6 +649,21 @@ export default function NotebookPage() {
               </div>
               
               <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800 mb-2">
+                    <strong>📥 Download Template:</strong>
+                  </p>
+                  <a
+                    href="/batch-upload-template.csv"
+                    download
+                    className="text-sm text-blue-600 hover:text-blue-800 underline"
+                  >
+                    Download CSV Template
+                  </a>
+                  <p className="text-xs text-blue-700 mt-2">
+                    Format: word, target_language, native_language (one word per line)
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">

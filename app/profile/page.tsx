@@ -134,12 +134,39 @@ export default function ProfilePage() {
           const p = data.profile || data
           setFullName(p.full_name || '')
           setBio(p.bio || '')
-          setUiLanguage(p.ui_language || 'en')
+          // Only update uiLanguage if it's different to avoid re-render loops
+          const newUiLanguage = p.ui_language || 'en'
+          if (newUiLanguage !== uiLanguage) {
+            setUiLanguage(newUiLanguage as 'en' | 'zh')
+          }
           setPreferredLanguages(p.preferred_languages || [])
           setLearningGoals(p.learning_goals || '')
           setDailyGoal(p.daily_goal || 10)
           setNotificationEnabled(p.notification_enabled !== false)
-          setTheme(p.theme || 'light')
+          const newTheme = p.theme || 'light'
+          setTheme(newTheme as 'light' | 'dark' | 'auto')
+          
+          // Apply theme immediately
+          if (typeof window !== 'undefined') {
+            const html = document.documentElement
+            if (newTheme === 'dark') {
+              html.classList.add('dark')
+              html.style.colorScheme = 'dark'
+            } else if (newTheme === 'light') {
+              html.classList.remove('dark')
+              html.style.colorScheme = 'light'
+            } else if (newTheme === 'auto') {
+              const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+              if (prefersDark) {
+                html.classList.add('dark')
+                html.style.colorScheme = 'dark'
+              } else {
+                html.classList.remove('dark')
+                html.style.colorScheme = 'light'
+              }
+            }
+            localStorage.setItem('theme', newTheme)
+          }
         }
       }
     } catch (error) {
@@ -199,6 +226,35 @@ export default function ProfilePage() {
         setProfile(data.profile)
         setEditingField(null)
         setFieldSuccess(prev => ({ ...prev, [fieldName]: true }))
+        
+        // Apply theme immediately if theme was changed
+        if (fieldName === 'theme' && typeof window !== 'undefined') {
+          const html = document.documentElement
+          if (value === 'dark') {
+            html.classList.add('dark')
+            html.style.colorScheme = 'dark'
+          } else if (value === 'light') {
+            html.classList.remove('dark')
+            html.style.colorScheme = 'light'
+          } else if (value === 'auto') {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+            if (prefersDark) {
+              html.classList.add('dark')
+              html.style.colorScheme = 'dark'
+            } else {
+              html.classList.remove('dark')
+              html.style.colorScheme = 'light'
+            }
+          }
+          localStorage.setItem('theme', value)
+        }
+        
+        // Apply UI language immediately if changed
+        if (fieldName === 'uiLanguage' && typeof window !== 'undefined') {
+          // Reload page to apply new language (or use a more elegant solution)
+          // For now, just update localStorage
+          localStorage.setItem('uiLanguage', value)
+        }
         
         // Clear success message after 2 seconds
         setTimeout(() => {
@@ -421,15 +477,22 @@ export default function ProfilePage() {
                   <div className="space-y-2">
                     <select
                       value={uiLanguage}
-                      onChange={(e) => setUiLanguage(e.target.value as 'en' | 'zh')}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                      onChange={(e) => {
+                        const newValue = e.target.value as 'en' | 'zh'
+                        setUiLanguage(newValue)
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent bg-white text-gray-900"
+                      style={{ color: 'rgb(17 24 39)' }}
                     >
-                      <option value="en">English</option>
-                      <option value="zh">简体中文</option>
+                      <option value="en" style={{ color: 'rgb(17 24 39)' }}>English</option>
+                      <option value="zh" style={{ color: 'rgb(17 24 39)' }}>简体中文</option>
                     </select>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleSaveField('uiLanguage', uiLanguage)}
+                        onClick={() => {
+                          // Use the current uiLanguage state value directly
+                          handleSaveField('uiLanguage', uiLanguage)
+                        }}
                         disabled={savingField === 'uiLanguage'}
                         className="px-3 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 text-sm"
                       >
