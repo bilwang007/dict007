@@ -441,6 +441,10 @@ export async function generateImage(
   prompt: string,
   meaningContext?: string
 ): Promise<string> {
+  // For China users: Try China-accessible image service first if available
+  // You can add Aliyun OSS, Tencent COS, or other China-based services here
+  // Example: if (process.env.ALIYUN_OSS_ENABLED) { ... }
+  
   // Use Unsplash API for image generation
   if (process.env.UNSPLASH_ACCESS_KEY) {
     try {

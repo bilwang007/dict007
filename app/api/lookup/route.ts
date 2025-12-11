@@ -368,7 +368,12 @@ export async function POST(request: NextRequest) {
       nativeLanguage, // Add native language
     }
 
-    return NextResponse.json(result)
+    return NextResponse.json(result, {
+      headers: {
+        // Cache API responses for 5 minutes to reduce load for China users
+        'Cache-Control': 'private, max-age=300, stale-while-revalidate=600',
+      },
+    })
   } catch (error) {
     console.error('Lookup error:', error)
     return NextResponse.json(

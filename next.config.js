@@ -34,7 +34,7 @@ const nextConfig = {
       },
     ],
   },
-  // Security headers
+  // Security headers and caching for China optimization
   async headers() {
     return [
       {
@@ -67,6 +67,25 @@ const nextConfig = {
           {
             key: 'Permissions-Policy',
             value: 'camera=(), microphone=(), geolocation=()'
+          },
+        ],
+      },
+      // Cache static assets aggressively for China users
+      {
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        source: '/images/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=86400, stale-while-revalidate=604800',
           },
         ],
       },
