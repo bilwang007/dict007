@@ -22,13 +22,20 @@ export async function POST(request: NextRequest) {
         ? `${definition.substring(0, 150)}` // Fall back to definition
         : word // Last resort: just the word
     
-    const imageUrl = await generateImage(prompt, meaningContext || definition)
+    // Add timeout for image generation (10 seconds)
+    const imageUrl = await Promise.race([
+      generateImage(prompt, meaningContext || definition),
+      new Promise<string>((_, reject) => 
+        setTimeout(() => reject(new Error('Image generation timeout')), 10000)
+      )
+    ])
 
     return NextResponse.json({ imageUrl })
   } catch (error) {
     console.error('Image generation error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to generate image'
     return NextResponse.json(
-      { error: 'Failed to generate image', imageUrl: '' },
+      { error: errorMessage, imageUrl: '' },
       { status: 500 }
     )
   }

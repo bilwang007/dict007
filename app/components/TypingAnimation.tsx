@@ -92,10 +92,17 @@ export function DefinitionLoadingCard({
   }, [word])
 
   // Show examples when definition is available or when examples are loaded
+  // Wait for definition to fully display before showing examples (definition on top)
   useEffect(() => {
-    if (showDefinition && (definitionTarget || examples)) {
-      // Start showing examples after definition appears
-      const timer = setTimeout(() => setShowExamples(true), 600)
+    if (showDefinition && definitionTarget && (definitionTarget.length > 0)) {
+      // Calculate time needed for definition to type out (definition should complete first)
+      const definitionTypingTime = (definitionTarget.length / 40) * 1000 // 40 chars/sec
+      // Show examples after definition finishes typing + small delay
+      const timer = setTimeout(() => {
+        if (examples && examples.length > 0) {
+          setShowExamples(true)
+        }
+      }, definitionTypingTime + 300) // Wait for definition to finish + 300ms
       return () => clearTimeout(timer)
     }
   }, [showDefinition, definitionTarget, examples])

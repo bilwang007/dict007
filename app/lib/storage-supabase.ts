@@ -15,26 +15,55 @@ export async function getNotebookEntries(): Promise<NotebookEntry[]> {
   }
   const user = session.user
 
-  // Add timeout to prevent hanging
-  const queryPromise = supabase
-    .from('notebook_entries')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-
-  const timeoutPromise = new Promise((_, reject) => 
-    setTimeout(() => reject(new Error('Query timeout after 5 seconds')), 5000)
-  )
-
+  // Add timeout and retry logic to prevent hanging (important for China mainland)
   let data, error
-  try {
-    const result = await Promise.race([queryPromise, timeoutPromise])
-    data = (result as any).data
-    error = (result as any).error
-  } catch (err: any) {
-    console.error('❌ Notebook query timeout or error:', err)
-    error = { message: err.message || 'Query failed', code: err.code || 'TIMEOUT' }
-    data = null
+  const maxRetries = 2
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const queryPromise = supabase
+        .from('notebook_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      const timeoutPromise = new Promise<{ data: null; error: { message: string; code: string } }>((resolve) => 
+        setTimeout(() => resolve({ 
+          data: null, 
+          error: { message: 'Query timeout after 8 seconds', code: 'TIMEOUT' } 
+        }), 8000)
+      )
+
+      const result = await Promise.race([
+        queryPromise.then(r => ({ data: r.data, error: r.error })),
+        timeoutPromise
+      ])
+      
+      data = result.data
+      error = result.error
+      
+      if (!error && data) {
+        break // Success, exit retry loop
+      } else if (error && attempt < maxRetries) {
+        // Wait before retry (exponential backoff)
+        console.log(`⚠️ Notebook query attempt ${attempt + 1} failed, retrying...`)
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+        continue
+      } else if (error) {
+        // Last attempt failed
+        break
+      }
+    } catch (err: any) {
+      console.error(`❌ Notebook query attempt ${attempt + 1} failed:`, err)
+      if (attempt < maxRetries) {
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+        continue
+      } else {
+        error = { message: err.message || 'Query failed', code: err.code || 'TIMEOUT' }
+        data = null
+      }
+    }
   }
 
   if (error) {

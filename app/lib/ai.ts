@@ -407,14 +407,19 @@ export async function fetchWikipediaDefinition(
     
     const wikiLang = wikiLangMap[targetLanguage] || 'en'
     
-    // Try to fetch from Wikipedia API
+    // Try to fetch from Wikipedia API with timeout (important for China mainland)
     const apiUrl = `https://${wikiLang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(word)}`
+    
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 2000) // 2 second timeout
     
     const response = await fetch(apiUrl, {
       headers: {
         'User-Agent': 'DictionaryApp/1.0 (https://example.com)',
       },
+      signal: controller.signal,
     })
+    clearTimeout(timeoutId)
     
     if (response.ok) {
       const data = await response.json()
@@ -456,14 +461,20 @@ export async function generateImage(
       
       const encodedQuery = encodeURIComponent(searchQuery)
       
+      // Add timeout for Unsplash API (5 seconds) - important for China mainland
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000)
+      
       const unsplashResponse = await fetch(
         `https://api.unsplash.com/photos/random?query=${encodedQuery}&orientation=landscape&client_id=${process.env.UNSPLASH_ACCESS_KEY}`,
         {
           headers: {
             'Accept-Version': 'v1',
-          }
+          },
+          signal: controller.signal,
         }
       )
+      clearTimeout(timeoutId)
       
       if (unsplashResponse.ok) {
         const data = await unsplashResponse.json()
@@ -481,18 +492,42 @@ export async function generateImage(
         console.log('Unsplash API error:', unsplashResponse.status, errorText)
       }
     } catch (error) {
-      console.log('Unsplash API failed:', error)
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Unsplash API timeout (5s) - using fallback')
+      } else {
+        console.log('Unsplash API failed:', error)
+      }
     }
   }
   
   // Final fallback: Use Unsplash source (no API key, less reliable)
-  let unsplashQuery = prompt.substring(0, 50)
-  if (meaningContext) {
-    unsplashQuery = `${prompt.substring(0, 30)} ${meaningContext.substring(0, 20)}`
+  // Add timeout for fallback too (important for China mainland)
+  try {
+    let unsplashQuery = prompt.substring(0, 50)
+    if (meaningContext) {
+      unsplashQuery = `${prompt.substring(0, 30)} ${meaningContext.substring(0, 20)}`
+    }
+    const fallbackController = new AbortController()
+    const fallbackTimeoutId = setTimeout(() => fallbackController.abort(), 3000)
+    
+    // Try to fetch fallback image with timeout
+    const fallbackResponse = await fetch(
+      `https://source.unsplash.com/800x600/?${encodeURIComponent(unsplashQuery)}`,
+      { signal: fallbackController.signal }
+    )
+    clearTimeout(fallbackTimeoutId)
+    
+    if (fallbackResponse.ok) {
+      console.log('Using Unsplash fallback:', fallbackResponse.url)
+      return fallbackResponse.url
+    }
+  } catch (error) {
+    console.log('Unsplash fallback failed:', error)
   }
-  const fallbackUrl = `https://source.unsplash.com/800x600/?${encodeURIComponent(unsplashQuery)}`
-  console.log('Using Unsplash fallback:', fallbackUrl)
-  return fallbackUrl
+  
+  // Ultimate fallback: return empty string (component will handle missing image)
+  console.log('All image sources failed, returning empty string')
+  return ''
 }
 
 export async function generateAudio(text: string, language: string): Promise<Buffer> {

@@ -154,20 +154,53 @@ export default function Home() {
       setLoadingResult({ word, definitionTarget: '', definition: '', examples: [], usageNote: '' })
       setMinLoadingTime(true)
       
-      const response = await fetch('/api/lookup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          word,
-          targetLanguage,
-          nativeLanguage,
-        }),
-      })
+      // Add timeout and retry logic for lookup (important for China mainland)
+      let response: Response | null = null
+      let lastError: Error | null = null
+      const maxRetries = 2
+      
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+          
+          response = await fetch('/api/lookup', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              word,
+              targetLanguage,
+              nativeLanguage,
+            }),
+            signal: controller.signal,
+          })
+          clearTimeout(timeoutId)
+          
+          if (response.ok) {
+            break // Success, exit retry loop
+          } else if (attempt < maxRetries) {
+            // Wait before retry (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+            continue
+          } else {
+            throw new Error(`Failed to lookup word: ${response.status} ${response.statusText}`)
+          }
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error('Unknown error')
+          if (attempt < maxRetries && (err instanceof Error && err.name === 'AbortError')) {
+            // Timeout - retry
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
+            continue
+          } else {
+            throw lastError
+          }
+        }
+      }
 
-      if (!response.ok) {
-        throw new Error('Failed to lookup word')
+      if (!response || !response.ok) {
+        throw lastError || new Error('Failed to lookup word')
       }
 
       const data = await response.json()
