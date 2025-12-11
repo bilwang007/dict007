@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Image from 'next/image'
 import { ChevronDown, ChevronUp, Trash2, Tag, X, MessageSquare, Save, ImageIcon, Loader2 } from 'lucide-react'
@@ -34,15 +34,9 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
   useEffect(() => {
     setTags(entry.tags || [])
     setCurrentEntry(entry)
-  }, [entry.tags, entry.id])
+  }, [entry])
   
-  // Load user comment when entry changes
-  useEffect(() => {
-    loadUserComment()
-    loadCommentForDisplay()
-  }, [entry.id])
-  
-  const loadCommentForDisplay = async () => {
+  const loadCommentForDisplay = useCallback(async () => {
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
@@ -70,9 +64,9 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
       console.error('Error loading comment for display:', error)
       setDisplayedComment('')
     }
-  }
+  }, [entry.word, entry.targetLanguage, entry.nativeLanguage])
   
-  const loadUserComment = async () => {
+  const loadUserComment = useCallback(async () => {
     setIsLoadingComment(true)
     try {
       const supabase = createClient()
@@ -104,7 +98,13 @@ export default function NotebookItem({ entry, onDelete, isDeleting = false }: No
     } finally {
       setIsLoadingComment(false)
     }
-  }
+  }, [entry.word, entry.targetLanguage, entry.nativeLanguage])
+
+  // Load user comment when entry changes
+  useEffect(() => {
+    loadUserComment()
+    loadCommentForDisplay()
+  }, [entry.id, loadUserComment, loadCommentForDisplay])
   
   const handleSaveComment = async () => {
     setIsSavingComment(true)

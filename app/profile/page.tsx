@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, Mail, Calendar, LogOut, Edit2, Globe, Target, Bell, Palette } from 'lucide-react'
 import Navigation from '../components/Navigation'
@@ -104,9 +104,6 @@ export default function ProfilePage() {
       }
       setUser(session.user)
       setLoading(false)
-      
-      // Fetch user profile
-      fetchProfile(session.user.id)
     })
 
     // Listen for auth changes
@@ -115,14 +112,13 @@ export default function ProfilePage() {
         router.push('/login?redirect=/profile')
       } else {
         setUser(session.user)
-        fetchProfile(session.user.id)
       }
     })
 
     return () => subscription.unsubscribe()
   }, [router])
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string) => {
     try {
       const response = await fetch(`/api/user/profile`)
       if (response.ok) {
@@ -172,7 +168,13 @@ export default function ProfilePage() {
     } catch (error) {
       console.error('Error fetching profile:', error)
     }
-  }
+  }, [uiLanguage])
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile(user.id)
+    }
+  }, [user, fetchProfile])
 
   // Save individual field
   const handleSaveField = async (fieldName: string, value: any) => {
@@ -346,13 +348,13 @@ export default function ProfilePage() {
                 {editingField === 'fullName' ? (
                   <div className="flex items-center gap-2 mb-2">
                     <label htmlFor="fullName-input" className="sr-only">{t.fullName}</label>
-                    <input
+                  <input
                       id="fullName-input"
                       name="fullName"
-                      type="text"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      placeholder={t.fullName}
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder={t.fullName}
                       className="flex-1 text-xl sm:text-2xl font-semibold text-gray-900 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
                       autoFocus
                     />
@@ -374,8 +376,8 @@ export default function ProfilePage() {
                 ) : (
                   <div className="flex items-center gap-2 mb-2">
                     <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 flex-1">
-                      {fullName || user.email?.split('@')[0] || 'User'}
-                    </h2>
+                    {fullName || user.email?.split('@')[0] || 'User'}
+                  </h2>
                     <button
                       onClick={() => setEditingField('fullName')}
                       className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
@@ -412,8 +414,8 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold text-gray-700">
-                    {t.bio}
-                  </label>
+                  {t.bio}
+                </label>
                   {editingField !== 'bio' && (
                     <button
                       onClick={() => setEditingField('bio')}
@@ -427,14 +429,14 @@ export default function ProfilePage() {
                 {editingField === 'bio' ? (
                   <div className="space-y-2">
                     <label htmlFor="bio-textarea" className="sr-only">{t.bio}</label>
-                    <textarea
+                  <textarea
                       id="bio-textarea"
                       name="bio"
-                      value={bio}
-                      onChange={(e) => setBio(e.target.value)}
-                      placeholder={t.enterBio}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    placeholder={t.enterBio}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
                       autoFocus
                     />
                     <div className="flex gap-2">
@@ -469,9 +471,9 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Globe className="w-4 h-4" />
-                    {t.uiLanguage}
-                  </label>
+                  <Globe className="w-4 h-4" />
+                  {t.uiLanguage}
+                </label>
                   {editingField !== 'uiLanguage' && (
                     <button
                       onClick={() => setEditingField('uiLanguage')}
@@ -485,10 +487,10 @@ export default function ProfilePage() {
                 {editingField === 'uiLanguage' ? (
                   <div className="space-y-2">
                     <label htmlFor="uiLanguage-select" className="sr-only">{t.uiLanguage}</label>
-                    <select
+                  <select
                       id="uiLanguage-select"
                       name="uiLanguage"
-                      value={uiLanguage}
+                    value={uiLanguage}
                       onChange={(e) => {
                         const newValue = e.target.value as 'en' | 'zh'
                         setUiLanguage(newValue)
@@ -498,7 +500,7 @@ export default function ProfilePage() {
                     >
                       <option value="en" style={{ color: 'rgb(17 24 39)' }}>English</option>
                       <option value="zh" style={{ color: 'rgb(17 24 39)' }}>简体中文</option>
-                    </select>
+                  </select>
                     <div className="flex gap-2">
                       <button
                         onClick={() => {
@@ -534,8 +536,8 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold text-gray-700">
-                    {t.preferredLanguages}
-                  </label>
+                  {t.preferredLanguages}
+                </label>
                   {editingField !== 'preferredLanguages' && (
                     <button
                       onClick={() => setEditingField('preferredLanguages')}
@@ -548,20 +550,20 @@ export default function ProfilePage() {
                 </div>
                 {editingField === 'preferredLanguages' ? (
                   <div className="space-y-2">
-                    <div className="flex flex-wrap gap-2">
-                      {LANGUAGES.map(lang => (
-                        <button
-                          key={lang.code}
-                          onClick={() => toggleLanguage(lang.code)}
-                          className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                            preferredLanguages.includes(lang.code)
-                              ? 'bg-gray-700 text-white'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {lang.name}
-                        </button>
-                      ))}
+                  <div className="flex flex-wrap gap-2">
+                    {LANGUAGES.map(lang => (
+                      <button
+                        key={lang.code}
+                        onClick={() => toggleLanguage(lang.code)}
+                        className={`px-3 py-1 rounded-full text-sm transition-colors ${
+                          preferredLanguages.includes(lang.code)
+                            ? 'bg-gray-700 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {lang.name}
+                      </button>
+                    ))}
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -611,9 +613,9 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Target className="w-4 h-4" />
-                    {t.learningGoals}
-                  </label>
+                  <Target className="w-4 h-4" />
+                  {t.learningGoals}
+                </label>
                   {editingField !== 'learningGoals' && (
                     <button
                       onClick={() => setEditingField('learningGoals')}
@@ -627,14 +629,14 @@ export default function ProfilePage() {
                 {editingField === 'learningGoals' ? (
                   <div className="space-y-2">
                     <label htmlFor="learningGoals-textarea" className="sr-only">{t.learningGoals}</label>
-                    <textarea
+                  <textarea
                       id="learningGoals-textarea"
                       name="learningGoals"
-                      value={learningGoals}
-                      onChange={(e) => setLearningGoals(e.target.value)}
-                      placeholder={t.enterGoals}
-                      rows={3}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                    value={learningGoals}
+                    onChange={(e) => setLearningGoals(e.target.value)}
+                    placeholder={t.enterGoals}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
                       autoFocus
                     />
                     <div className="flex gap-2">
@@ -669,8 +671,8 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold text-gray-700">
-                    {t.dailyGoal}
-                  </label>
+                  {t.dailyGoal}
+                </label>
                   {editingField !== 'dailyGoal' && (
                     <button
                       onClick={() => setEditingField('dailyGoal')}
@@ -683,20 +685,20 @@ export default function ProfilePage() {
                 </div>
                 {editingField === 'dailyGoal' ? (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3">
                       <label htmlFor="dailyGoal-input" className="sr-only">{t.dailyGoal}</label>
-                      <input
+                    <input
                         id="dailyGoal-input"
                         name="dailyGoal"
-                        type="number"
-                        value={dailyGoal}
-                        onChange={(e) => setDailyGoal(parseInt(e.target.value) || 10)}
-                        min="1"
-                        max="100"
-                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                      type="number"
+                      value={dailyGoal}
+                      onChange={(e) => setDailyGoal(parseInt(e.target.value) || 10)}
+                      min="1"
+                      max="100"
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
                         autoFocus
-                      />
-                      <span className="text-gray-600">{t.wordsPerDay}</span>
+                    />
+                    <span className="text-gray-600">{t.wordsPerDay}</span>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -730,9 +732,9 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Bell className="w-4 h-4" />
-                    {t.notifications}
-                  </label>
+                  <Bell className="w-4 h-4" />
+                  {t.notifications}
+                </label>
                   {editingField !== 'notificationEnabled' && (
                     <button
                       onClick={() => setEditingField('notificationEnabled')}
@@ -746,16 +748,16 @@ export default function ProfilePage() {
                 {editingField === 'notificationEnabled' ? (
                   <div className="space-y-2">
                     <label htmlFor="notificationEnabled-checkbox" className="flex items-center gap-2 cursor-pointer">
-                      <input
+                    <input
                         id="notificationEnabled-checkbox"
                         name="notificationEnabled"
-                        type="checkbox"
-                        checked={notificationEnabled}
-                        onChange={(e) => setNotificationEnabled(e.target.checked)}
-                        className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
-                      />
-                      <span className="text-gray-700">{notificationEnabled ? t.enabled : t.disabled}</span>
-                    </label>
+                      type="checkbox"
+                      checked={notificationEnabled}
+                      onChange={(e) => setNotificationEnabled(e.target.checked)}
+                      className="w-4 h-4 text-gray-600 rounded focus:ring-gray-500"
+                    />
+                    <span className="text-gray-700">{notificationEnabled ? t.enabled : t.disabled}</span>
+                  </label>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleSaveField('notificationEnabled', notificationEnabled)}
@@ -788,9 +790,9 @@ export default function ProfilePage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Palette className="w-4 h-4" />
-                    {t.theme}
-                  </label>
+                  <Palette className="w-4 h-4" />
+                  {t.theme}
+                </label>
                   {editingField !== 'theme' && (
                     <button
                       onClick={() => setEditingField('theme')}
@@ -804,17 +806,17 @@ export default function ProfilePage() {
                 {editingField === 'theme' ? (
                   <div className="space-y-2">
                     <label htmlFor="theme-select" className="sr-only">{t.theme}</label>
-                    <select
+                  <select
                       id="theme-select"
                       name="theme"
-                      value={theme}
-                      onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'auto')}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
-                    >
-                      <option value="light">{t.light}</option>
-                      <option value="dark">{t.dark}</option>
-                      <option value="auto">{t.auto}</option>
-                    </select>
+                    value={theme}
+                    onChange={(e) => setTheme(e.target.value as 'light' | 'dark' | 'auto')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                  >
+                    <option value="light">{t.light}</option>
+                    <option value="dark">{t.dark}</option>
+                    <option value="auto">{t.auto}</option>
+                  </select>
                     <div className="flex gap-2">
                       <button
                         onClick={() => handleSaveField('theme', theme)}
@@ -848,13 +850,13 @@ export default function ProfilePage() {
 
             {/* Action Buttons */}
             <div className="pt-6 border-t border-gray-200">
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
-              >
-                <LogOut className="w-4 h-4" />
-                {t.logout}
-              </button>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm"
+                >
+                  <LogOut className="w-4 h-4" />
+                  {t.logout}
+                </button>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -46,25 +46,29 @@ export default function StudyPage() {
     }
   }
 
-  const handleNext = () => {
-    if (currentIndex < flashcards.length - 1) {
-      setDirection(1)
-      setCurrentIndex(currentIndex + 1)
-    } else {
-      setDirection(1)
-      setCurrentIndex(0)
-    }
-  }
+  const handleNext = useCallback(() => {
+    setCurrentIndex(prev => {
+      if (prev < flashcards.length - 1) {
+        setDirection(1)
+        return prev + 1
+      } else {
+        setDirection(1)
+        return 0
+      }
+    })
+  }, [flashcards.length])
 
-  const handlePrevious = () => {
-    if (currentIndex > 0) {
-      setDirection(-1)
-      setCurrentIndex(currentIndex - 1)
-    } else {
-      setDirection(-1)
-      setCurrentIndex(flashcards.length - 1)
-    }
-  }
+  const handlePrevious = useCallback(() => {
+    setCurrentIndex(prev => {
+      if (prev > 0) {
+        setDirection(-1)
+        return prev - 1
+      } else {
+        setDirection(-1)
+        return flashcards.length - 1
+      }
+    })
+  }, [flashcards.length])
 
   const handleShuffle = () => {
     const shuffled = [...flashcards].sort(() => Math.random() - 0.5)
@@ -103,7 +107,7 @@ export default function StudyPage() {
 
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [currentIndex, flashcards.length])
+  }, [currentIndex, flashcards.length, handleNext, handlePrevious])
 
   // Swipe gestures for mobile (thumb movement)
   useEffect(() => {
@@ -136,7 +140,7 @@ export default function StudyPage() {
       }
     }
 
-    const flashcardElement = document.querySelector('[data-flashcard]')
+    const flashcardElement = document.querySelector('[data-flashcard]') as HTMLElement | null
     if (flashcardElement) {
       flashcardElement.addEventListener('touchstart', handleTouchStart, { passive: true })
       flashcardElement.addEventListener('touchend', handleTouchEnd, { passive: true })
@@ -146,7 +150,7 @@ export default function StudyPage() {
         flashcardElement.removeEventListener('touchend', handleTouchEnd)
       }
     }
-  }, [currentIndex, flashcards.length])
+  }, [currentIndex, flashcards.length, handleNext, handlePrevious])
 
   // Page turn animation variants
   const pageVariants = {

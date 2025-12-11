@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { BookOpen, Loader2, Check, Sparkles, MessageSquare, X, Save, ImageIcon } from 'lucide-react'
 import Image from 'next/image'
 import AudioPlayer from './AudioPlayer'
@@ -82,10 +82,38 @@ export default function ResultCard({
   const [currentResult, setCurrentResult] = useState(result)
   
   // Update current result when result prop changes
-  useEffect(() => {
-    setCurrentResult(result)
-  }, [result])
-  
+  const loadUserComment = useCallback(async (): Promise<void> => {
+    if (!result?.wordDefinitionId) return
+    
+    setIsLoadingComment(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        setIsLoadingComment(false)
+        return
+      }
+      
+      const { data, error } = await supabase
+        .from('word_comments')
+        .select('comment')
+        .eq('word_definition_id', result.wordDefinitionId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      
+      if (!error && data) {
+        setUserComment(data.comment || '')
+      } else {
+        setUserComment('')
+      }
+    } catch (error) {
+      console.error('Error loading comment:', error)
+      setUserComment('')
+    } finally {
+      setIsLoadingComment(false)
+    }
+  }, [result?.wordDefinitionId])
+
   // Load user comment when result changes
   useEffect(() => {
     if (result?.wordDefinitionId) {
@@ -93,6 +121,7 @@ export default function ResultCard({
     } else {
       setUserComment('')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result?.wordDefinitionId])
   
   const handleGenerateImage = async (meaningIndex?: number) => {
@@ -158,38 +187,6 @@ export default function ResultCard({
     } finally {
       setIsGeneratingImage(false)
       setGeneratingImageIndex(null)
-    }
-  }
-  
-  const loadUserComment = async () => {
-    if (!result?.wordDefinitionId) return
-    
-    setIsLoadingComment(true)
-    try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        setIsLoadingComment(false)
-        return
-      }
-      
-      const { data, error } = await supabase
-        .from('word_comments')
-        .select('comment')
-        .eq('word_definition_id', result.wordDefinitionId)
-        .eq('user_id', user.id)
-        .maybeSingle()
-      
-      if (!error && data) {
-        setUserComment(data.comment || '')
-      } else {
-        setUserComment('')
-      }
-    } catch (error) {
-      console.error('Error loading comment:', error)
-      setUserComment('')
-    } finally {
-      setIsLoadingComment(false)
     }
   }
   
