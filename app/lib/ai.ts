@@ -53,12 +53,14 @@ export function parseMeanings(definitionTarget: string, definition: string): Arr
   const meanings: Array<{ definitionTarget: string; definition: string }> = []
   
   // Try multiple patterns for splitting numbered lists
-  // Pattern 1: Standard numbered list (1. 2. 3.)
-  const numberedPattern1 = /(\d+\.\s[^\d]+?)(?=\s\d+\.|$)/g
-  // Pattern 2: Chinese numbered list (1. 2. 3. or 一、二、三、)
-  const numberedPattern2 = /(\d+\.\s[^0-9一二三四五六七八九十]+?)(?=\s\d+\.|$)/g
-  // Pattern 3: Pattern with Chinese punctuation (1. 名词：... 2. 动词：...)
-  const numberedPattern3 = /(\d+\.\s[^0-9]+?)(?=\s*\d+\.|$)/gs
+  // Pattern 1: Standard numbered list (1. 2. 3.) - match up to next numbered item or end
+  // Use positive lookahead for next numbered item pattern (\d+\.\s) instead of negating digits
+  // This allows numbers within definitions (e.g., "established in 1990") without breaking parsing
+  const numberedPattern1 = /(\d+\.\s.+?)(?=\s*\d+\.\s|$)/gs
+  // Pattern 2: Chinese numbered list with better handling of numbers in content
+  const numberedPattern2 = /(\d+\.\s.+?)(?=\s*\d+\.\s|$)/gs
+  // Pattern 3: Pattern with Chinese punctuation - same improved approach
+  const numberedPattern3 = /(\d+\.\s.+?)(?=\s*\d+\.\s|$)/gs
   
   // Try to split target language (English) by numbered list
   let targetMatches = definitionTarget.match(numberedPattern1)
@@ -97,7 +99,8 @@ export function parseMeanings(definitionTarget: string, definition: string): Arr
       // Chinese definition doesn't have matching numbered items
       // Try to split by Chinese separators or match semantically
       // Pattern for Chinese: "1. 名词：... 2. 名词：..." or "1. ... 2. ..."
-      const chineseNumberedPattern = /(\d+\.\s*[^0-9]+?)(?=\s*\d+\.|$)/gs
+      // Use lookahead for next numbered item instead of negating digits
+      const chineseNumberedPattern = /(\d+\.\s*.+?)(?=\s*\d+\.\s|$)/gs
       const chineseMatches = definition.match(chineseNumberedPattern)
       
       if (chineseMatches && chineseMatches.length === targetMatches.length) {

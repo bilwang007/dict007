@@ -93,6 +93,7 @@ export async function POST(request: NextRequest) {
         
         if (notebookEntries.length > 1 && hasMeaningIndex) {
           // Multiple meanings - combine into single result with meanings array
+          // Use newlines as delimiters to preserve structure for parsing
           const firstEntry = notebookEntries[0]
           definitionResult = {
             phonetic: firstEntry.phonetic || undefined,
@@ -100,12 +101,12 @@ export async function POST(request: NextRequest) {
               e.meaning_index 
                 ? `${e.meaning_index}. ${e.definition_target || e.definition || ''}`
                 : e.definition_target || e.definition || ''
-            ).join(' '),
+            ).join('\n'),
             definition: notebookEntries.map(e => 
               e.meaning_index 
                 ? `${e.meaning_index}. ${e.definition || ''}`
                 : e.definition || ''
-            ).join(' '),
+            ).join('\n'),
             examples: notebookEntries.flatMap(entry => [
               {
                 sentence: entry.example_sentence_1 || '',

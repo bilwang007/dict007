@@ -114,6 +114,11 @@ export default function ResultCard({
     }
   }, [result?.wordDefinitionId])
 
+  // Sync currentResult when result prop changes
+  useEffect(() => {
+    setCurrentResult(result)
+  }, [result])
+
   // Load user comment when result changes
   useEffect(() => {
     if (result?.wordDefinitionId) {
@@ -182,7 +187,6 @@ export default function ResultCard({
         }
       }
     } catch (error) {
-      console.error('Failed to generate image:', error)
       console.error('Failed to generate image:', error)
     } finally {
       setIsGeneratingImage(false)
